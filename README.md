@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏛️ Civic Connect AI
+#  Civic Connect AI
 
 ### AI-Powered Civic Governance Platform
 
@@ -31,15 +31,15 @@ The platform is built around three core principles:
 
 | Principle | Description |
 |---|---|
-| 🙋 **Simple citizen experience** | Report an issue in under 30 seconds — photo, voice, or text |
-| 🤖 **AI-assisted governance** | Automated summaries, severity scoring, and department routing |
-| ⚡ **Faster issue resolution** | Duplicate detection and impact scoring cut through the noise |
+|  **Simple citizen experience** | Report an issue in under 30 seconds — photo, voice, or text |
+|  **AI-assisted governance** | Automated summaries, severity scoring, and department routing |
+|  **Faster issue resolution** | Duplicate detection and impact scoring cut through the noise |
 
 ---
 
 ## Features
 
-### 📱 Citizen Portal
+###  Citizen Portal
 - OTP Authentication
 - Photo Upload
 - Voice or Text Complaint
@@ -51,7 +51,7 @@ The platform is built around three core principles:
 - Multilingual Support
 - Progressive Web Application (PWA)
 
-### 🏢 Government Dashboard
+###  Government Dashboard
 - AI Prioritized Complaints
 - Constituency Heatmaps
 - Ward Analytics
@@ -61,7 +61,7 @@ The platform is built around three core principles:
 - Notification System
 - Performance Dashboard
 
-### 🧠 Artificial Intelligence
+###  Artificial Intelligence
 - Complaint Summarization
 - Image Analysis & OCR
 - Speech-to-Text
@@ -229,15 +229,15 @@ civic-connect-ai/
 
 ## Security
 
-- 🔐 JWT Authentication
-- 🛡️ Role-Based Access Control (RBAC)
-- 🔒 HTTPS Everywhere
-- ✅ Input Validation
-- 🚦 Rate Limiting
-- 🧱 SQL Injection Protection
-- 🧼 Cross-Site Scripting (XSS) Protection
-- 📝 Audit Logging
-- 🔑 Secure Environment Variables
+-  JWT Authentication
+-  Role-Based Access Control (RBAC)
+-  HTTPS Everywhere
+-  Input Validation
+-  Rate Limiting
+-  SQL Injection Protection
+-  Cross-Site Scripting (XSS) Protection
+-  Audit Logging
+-  Secure Environment Variables
 
 ---
 
