@@ -101,13 +101,16 @@ export async function analyzeComplaintImage(
             {
               parts: [
                 {
-                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and return JSON with:
+                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and verify if it is related to a "${hintCategory || 'any'}" issue (e.g. if the category is 'water', it should be a water leakage, burst pipe, dry tap, overflowing gutter, water contamination issue, etc.; if 'roads', it should show potholes, damaged streets, broken pavements; if 'sanitation', it should show uncollected garbage, piles of rubbish).
+                  Return JSON with the following schema:
                   {
                     "detectedCategory": "water" | "sanitation" | "roads" | "electricity" | "drainage" | "healthcare" | "education" | "transport" | "other",
                     "detectedObjects": string[],
                     "confidence": number, // 0.0-1.0
                     "severity": "critical" | "high" | "medium" | "low",
-                    "rawLabels": string[]
+                    "rawLabels": string[],
+                    "isValid": boolean, // true if the image is actually related to a "${hintCategory || 'civic'}" issue, false otherwise
+                    "validationMessage": "A concise explanation of why the image is relevant or why it does not match the category."
                   }
                   Be conservative with severity. Only use "critical" for life-threatening situations.`,
                 },
@@ -144,13 +147,16 @@ export async function analyzeComplaintImage(
               content: [
                 {
                   type: "text",
-                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and return JSON with:
+                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and verify if it is related to a "${hintCategory || 'any'}" issue.
+                  Return JSON with the following schema:
                   {
-                    "detectedCategory": one of [water, sanitation, roads, electricity, drainage, healthcare, education, transport, other],
-                    "detectedObjects": [list of objects you see],
-                    "confidence": 0.0-1.0,
-                    "severity": one of [critical, high, medium, low],
-                    "rawLabels": [raw detected labels]
+                    "detectedCategory": "water" | "sanitation" | "roads" | "electricity" | "drainage" | "healthcare" | "education" | "transport" | "other",
+                    "detectedObjects": string[],
+                    "confidence": number, // 0.0-1.0
+                    "severity": "critical" | "high" | "medium" | "low",
+                    "rawLabels": string[],
+                    "isValid": boolean, // true if the image is related to a "${hintCategory || 'civic'}" issue, false otherwise
+                    "validationMessage": "A concise explanation of why it is relevant or not"
                   }
                   Be conservative with severity. Only use "critical" for life-threatening situations.`,
                 },
@@ -178,6 +184,13 @@ export async function analyzeComplaintImage(
   const confidence = 0.78 + Math.random() * 0.19; // 78–97%
   const severity = mockSeverityFromCategory(category);
 
+  // Mock validation logic
+  const isWrongFile = file.name.toLowerCase().includes("wrong") || file.name.toLowerCase().includes("invalid");
+  const isValid = hintCategory ? (category === hintCategory && !isWrongFile) : !isWrongFile;
+  const validationMessage = isValid
+    ? `The image shows objects matching the ${category} category.`
+    : `The image does not show objects matching the selected category: ${hintCategory || category}. It appears to be related to ${category}.`;
+
   return {
     detectedCategory: category,
     detectedObjects,
@@ -185,13 +198,15 @@ export async function analyzeComplaintImage(
     severity,
     rawLabels: detectedObjects,
     processingTimeMs: Date.now() - start,
+    isValid,
+    validationMessage,
   };
 }
 
 // ─── Speech Transcription ─────────────────────────────────────────────────────
 
 /**
- * Transcribe speech audio to text using Whisper API.
+ * Transcribe speech audio to text using Whisper API / Gemini API.
  * Falls back to mock for demo.
  */
 export async function transcribeSpeech(audio: Blob): Promise<string> {
@@ -209,7 +224,7 @@ export async function transcribeSpeech(audio: Blob): Promise<string> {
             {
               parts: [
                 {
-                  text: "Transcribe the following audio recording to text. Only return the transcription, nothing else. If it is in Hindi, transcribe it in Hindi. If it is in English, transcribe it in English.",
+                  text: "You are an expert audio transcriber. Transcribe the following audio recording to text. Only return the transcription, nothing else. If it is in Hindi, transcribe it in Hindi. If it is in English, transcribe it in English. If it is in a local Indian language, transcribe it clearly. Do not add metadata.",
                 },
                 {
                   inlineData: {
@@ -229,7 +244,7 @@ export async function transcribeSpeech(audio: Blob): Promise<string> {
       const formData = new FormData();
       formData.append("file", audio, "recording.webm");
       formData.append("model", "whisper-1");
-      formData.append("language", "hi"); // default; real app sends user's lang
+      formData.append("language", "hi"); // default
       const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
         headers: { Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}` },

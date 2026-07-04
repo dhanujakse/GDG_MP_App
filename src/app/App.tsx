@@ -301,9 +301,7 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
 // ════════════════════════════════════════════════════════════════════
 // CITIZEN SCREENS
 // ════════════════════════════════════════════════════════════════════
-function CitizenHome({ setTab }: { setTab: (t: CitizenTab) => void }) {
-  const myComplaints = complaintService.getMyCitizenComplaints("ctz_001");
-
+function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: CitizenTab) => void; onBellClick: () => void; unreadCount: number }) {
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-none">
       <div className="pt-6 pb-4 px-5">
@@ -312,9 +310,11 @@ function CitizenHome({ setTab }: { setTab: (t: CitizenTab) => void }) {
             <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">Good morning</p>
             <h1 className="text-[22px] font-bold text-foreground leading-tight" style={DF}>Priya Sharma</h1>
           </div>
-          <button className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+          <button onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
             <Bell size={19} className="text-foreground" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-card" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-card flex items-center justify-center text-[7.5px] text-white font-bold" />
+            )}
           </button>
         </div>
         <div className="flex items-center gap-1.5 mt-3 px-3 py-2 bg-secondary rounded-xl">
@@ -345,29 +345,23 @@ function CitizenHome({ setTab }: { setTab: (t: CitizenTab) => void }) {
         </div>
       </div>
 
-      {/* My Complaints */}
+      {/* Quick Guidelines */}
       <div className="px-5 pb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-foreground" style={DF}>My Complaints</h2>
-          <button onClick={() => setTab("complaints")} className="text-xs font-semibold text-primary">See all</button>
-        </div>
-        <div className="space-y-2.5">
-          {myComplaints.slice(0, 3).map(c => (
-            <button key={c.id} onClick={() => setTab("complaints")}
-              className="w-full flex items-center gap-3 p-3.5 bg-card rounded-2xl border border-border text-left active-press">
-              <CategoryIcon category={c.category} size={17} showBg bgSize="w-10 h-10" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{c.title}</p>
-                <p className="text-[11px] text-muted-foreground font-mono">{c.shortId}</p>
+        <h2 className="text-sm font-bold text-foreground mb-3" style={DF}>Citizen Guidelines</h2>
+        <div className="space-y-3">
+          {[
+            { emoji: "📸", title: "Upload or Capture Photos", desc: "Take a clear picture of the water leak, road damage, or uncollected garbage." },
+            { emoji: "🤖", title: "OpenCV & AI Validation", desc: "Our system runs OpenCV edge checks and Gemini API validation to ensure relevance." },
+            { emoji: "🗣️", title: "Voice Description Enabled", desc: "Describe the issue using voice in Hindi, English, or other Indian languages." }
+          ].map((item, i) => (
+            <div key={i} className="flex gap-3 p-3.5 bg-card rounded-2xl border border-border">
+              <span className="text-2xl leading-none">{item.emoji}</span>
+              <div>
+                <p className="text-xs font-bold text-foreground">{item.title}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
               </div>
-              <StatusBadge status={c.status} size="sm" />
-            </button>
-          ))}
-          {myComplaints.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-sm text-muted-foreground">No complaints yet. Report your first issue!</p>
             </div>
-          )}
+          ))}
         </div>
       </div>
     </div>
@@ -481,7 +475,7 @@ function CitizenProfile({ onLogout }: { onLogout: () => void }) {
 // MP SCREENS
 // ════════════════════════════════════════════════════════════════════
 
-function MPDashboard({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) => void }) {
+function MPDashboard({ onComplaintSelect, onBellClick, unreadCount }: { onComplaintSelect: (c: Complaint) => void; onBellClick: () => void; unreadCount: number }) {
   const stats = complaintService.getDashboardStats();
   const priorityList = complaintService.getPriorityList().slice(0, 5);
   const [filter, setFilter] = useState<"today" | "week" | "month">("week");
@@ -498,9 +492,11 @@ function MPDashboard({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) 
             <h1 className="text-[20px] font-bold text-foreground leading-tight" style={DF}>Dr. Rajesh Kumar</h1>
             <p className="text-xs text-muted-foreground">MP · Madurai Central</p>
           </div>
-          <button className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
+          <button onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
             <Bell size={19} className="text-foreground" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-card" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-card flex items-center justify-center text-[7.5px] text-white font-bold" />
+            )}
           </button>
         </div>
       </div>
@@ -687,6 +683,12 @@ export default function App() {
   const [mpTab, setMpTab] = useState<MPTab>("dashboard");
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
 
+  const [notifications, setNotifications] = useState<any[]>([
+    { id: "1", title: "Welcome to JanVaani!", desc: "Submit civic complaints directly to your local representative.", time: "Just now", unread: true },
+    { id: "2", title: "Constituency Notice", desc: "Drainage cleaning scheduled for Ward 14 this Friday.", time: "2h ago", unread: true },
+  ]);
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const handleComplaintSelect = (c: Complaint) => {
     setSelectedComplaint(c);
     if (phase === "citizen") setCitizenTab("detail");
@@ -701,7 +703,6 @@ export default function App() {
   const citizenNav = [
     { id: "home" as CitizenTab,       icon: <Home size={21} />,          label: "Home" },
     { id: "report" as CitizenTab,     icon: <Plus size={22} />,          label: "Report" },
-    { id: "complaints" as CitizenTab, icon: <ClipboardList size={21} />, label: "My Reports" },
     { id: "profile" as CitizenTab,    icon: <User size={21} />,          label: "Profile" },
   ];
 
@@ -771,28 +772,43 @@ export default function App() {
 
             {phase === "citizen" && (
               <>
-                {citizenTab === "home" && <CitizenHome setTab={setCitizenTab} />}
-                {citizenTab === "report" && <ReportWizard onBack={() => setCitizenTab("home")} />}
-                {citizenTab === "complaints" && (
-                  <CitizenComplaints onSelect={handleComplaintSelect} />
+                {citizenTab === "home" && (
+                  <CitizenHome
+                    setTab={setCitizenTab}
+                    onBellClick={() => setShowNotifications(true)}
+                    unreadCount={notifications.filter(n => n.unread).length}
+                  />
                 )}
-                {citizenTab === "profile" && <CitizenProfile onLogout={handleLogout} />}
-                {citizenTab === "detail" && selectedComplaint && (
-                  <ComplaintDetailCitizen
-                    complaint={selectedComplaint}
-                    onBack={() => setCitizenTab("complaints")}
-                    onJoin={() => {
-                      complaintService.joinComplaint(selectedComplaint.id, "ctz_001");
-                      setCitizenTab("complaints");
+                {citizenTab === "report" && (
+                  <ReportWizard
+                    onBack={() => setCitizenTab("home")}
+                    onComplaintRegistered={(shortId, category) => {
+                      setNotifications(prev => [
+                        {
+                          id: String(Date.now()),
+                          title: "Complaint Registered",
+                          desc: `Your ${category} complaint (${shortId}) has been successfully submitted.`,
+                          time: "Just now",
+                          unread: true,
+                        },
+                        ...prev,
+                      ]);
                     }}
                   />
                 )}
+                {citizenTab === "profile" && <CitizenProfile onLogout={handleLogout} />}
               </>
             )}
 
             {phase === "mp" && (
               <>
-                {mpTab === "dashboard" && <MPDashboard onComplaintSelect={handleComplaintSelect} />}
+                {mpTab === "dashboard" && (
+                  <MPDashboard
+                    onComplaintSelect={handleComplaintSelect}
+                    onBellClick={() => setShowNotifications(true)}
+                    unreadCount={notifications.filter(n => n.unread).length}
+                  />
+                )}
                 {mpTab === "priority" && <MPPriority onComplaintSelect={handleComplaintSelect} />}
                 {mpTab === "map" && <MPMapScreen onComplaintSelect={handleMapComplaintSelect} />}
                 {mpTab === "profile" && <MPProfile onLogout={handleLogout} />}
@@ -806,6 +822,39 @@ export default function App() {
               </>
             )}
           </div>
+
+          {/* Notifications Drawer */}
+          {showNotifications && (
+            <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end animate-fadeIn">
+              <div className="absolute inset-0" onClick={() => {
+                setShowNotifications(false);
+                setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+              }} />
+              <div className="relative bg-background rounded-t-3xl max-h-[70%] flex flex-col z-10 shadow-2xl border-t border-border animate-fadeIn">
+                <div className="shrink-0 p-5 border-b border-border flex items-center justify-between">
+                  <h3 className="text-base font-bold text-foreground" style={DF}>Notifications</h3>
+                  <button onClick={() => {
+                    setShowNotifications(false);
+                    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+                  }} className="text-xs font-bold text-primary active-press">Close</button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-none">
+                  {notifications.map(n => (
+                    <div key={n.id} className={`p-4 rounded-2xl border transition-all ${n.unread ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-xs font-bold text-foreground">{n.title}</p>
+                        <span className="text-[9px] text-muted-foreground font-semibold shrink-0">{n.time}</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">{n.desc}</p>
+                    </div>
+                  ))}
+                  {notifications.length === 0 && (
+                    <p className="text-center text-xs text-muted-foreground py-8">No notifications yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Bottom Nav */}
           {showNav && (

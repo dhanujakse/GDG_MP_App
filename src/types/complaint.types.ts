@@ -59,6 +59,8 @@ export interface AIImageAnalysis {
   severity: SeverityLevel;
   rawLabels: string[];
   processingTimeMs: number;
+  isValid?: boolean;
+  validationMessage?: string;
 }
 
 export interface AIComplaintAnalysis {

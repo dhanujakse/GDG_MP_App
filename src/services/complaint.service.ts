@@ -301,6 +301,7 @@ export const complaintService = {
     location: GeoLocation;
     citizenId: string;
     isAnonymous?: boolean;
+    photoUrl?: string;
   }): Complaint {
     const complaints = loadComplaints();
     const now = new Date().toISOString();
@@ -315,7 +316,13 @@ export const complaintService = {
       status: "ai_processing",
       severity: "medium",
       location: payload.location,
-      photos: [],
+      photos: payload.photoUrl ? [{
+        id: `ph_${Date.now()}`,
+        url: payload.photoUrl,
+        thumbnailUrl: payload.photoUrl,
+        uploadedAt: now,
+        uploadedBy: payload.citizenId
+      }] : [],
       citizensJoined: 0,
       joinedCitizenIds: [],
       reportedBy: payload.citizenId,
