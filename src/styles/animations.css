@@ -1,0 +1,203 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   CIVIC CONNECT AI — Extended Design System
+   Animations, government-grade UI patterns, utility classes
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Keyframe animations ────────────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 101, 52, 0.4); }
+  70%  { transform: scale(1);    box-shadow: 0 0 0 10px rgba(22, 101, 52, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(22, 101, 52, 0); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40%           { transform: scale(1); }
+}
+
+@keyframes checkmark {
+  from { stroke-dashoffset: 40; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ─── Animation utility classes ──────────────────────────────────────────── */
+
+.animate-fadeIn      { animation: fadeIn 0.3s ease forwards; }
+.animate-slideInRight { animation: slideInRight 0.3s ease forwards; }
+.animate-slideInLeft  { animation: slideInLeft 0.3s ease forwards; }
+.animate-scaleIn     { animation: scaleIn 0.25s ease forwards; }
+.animate-pulse-ring  { animation: pulse-ring 2s infinite; }
+.animate-spin-slow   { animation: spin-slow 1.5s linear infinite; }
+
+/* Staggered children */
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+
+/* ─── Skeleton / shimmer loading ─────────────────────────────────────────── */
+
+.skeleton {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--accent) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.5rem;
+}
+
+/* ─── AI pipeline step indicators ────────────────────────────────────────── */
+
+.ai-step-pending    { opacity: 0.4; }
+.ai-step-processing { opacity: 1; }
+.ai-step-done       { opacity: 1; }
+
+.ai-processing-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: dot-bounce 1.4s ease-in-out infinite both;
+}
+.ai-processing-dot:nth-child(2) { animation-delay: 0.16s; }
+.ai-processing-dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* ─── Severity color system ──────────────────────────────────────────────── */
+
+/* Used on badges, borders, indicators */
+.severity-critical {
+  --severity-bg: #fef2f2;
+  --severity-border: #fecaca;
+  --severity-text: #dc2626;
+  --severity-dot: #ef4444;
+}
+.severity-high {
+  --severity-bg: #fff7ed;
+  --severity-border: #fed7aa;
+  --severity-text: #ea580c;
+  --severity-dot: #f97316;
+}
+.severity-medium {
+  --severity-bg: #fefce8;
+  --severity-border: #fef08a;
+  --severity-text: #ca8a04;
+  --severity-dot: #eab308;
+}
+.severity-low {
+  --severity-bg: #f0fdf4;
+  --severity-border: #bbf7d0;
+  --severity-text: #16a34a;
+  --severity-dot: #22c55e;
+}
+
+/* ─── Category color system ──────────────────────────────────────────────── */
+
+.cat-water       { --cat-bg: #eff6ff; --cat-text: #2563eb; --cat-icon: #3b82f6; }
+.cat-sanitation  { --cat-bg: #f0fdf4; --cat-text: #15803d; --cat-icon: #22c55e; }
+.cat-roads       { --cat-bg: #f8fafc; --cat-text: #475569; --cat-icon: #64748b; }
+.cat-electricity { --cat-bg: #fefce8; --cat-text: #a16207; --cat-icon: #eab308; }
+.cat-drainage    { --cat-bg: #eff6ff; --cat-text: #1d4ed8; --cat-icon: #3b82f6; }
+.cat-healthcare  { --cat-bg: #fef2f2; --cat-text: #b91c1c; --cat-icon: #ef4444; }
+.cat-education   { --cat-bg: #fdf4ff; --cat-text: #7e22ce; --cat-icon: #a855f7; }
+.cat-transport   { --cat-bg: #fff7ed; --cat-text: #c2410c; --cat-icon: #f97316; }
+.cat-other       { --cat-bg: #f8fafc; --cat-text: #64748b; --cat-icon: #94a3b8; }
+
+/* ─── Status color system ────────────────────────────────────────────────── */
+
+.status-submitted     { --status-bg: #f0fdf4; --status-text: #15803d; --status-border: #bbf7d0; }
+.status-ai_processing { --status-bg: #eff6ff; --status-text: #1d4ed8; --status-border: #bfdbfe; }
+.status-pending_review{ --status-bg: #fff7ed; --status-text: #c2410c; --status-border: #fed7aa; }
+.status-assigned      { --status-bg: #fdf4ff; --status-text: #7e22ce; --status-border: #e9d5ff; }
+.status-in_progress   { --status-bg: #eff6ff; --status-text: #1d4ed8; --status-border: #bfdbfe; }
+.status-resolved      { --status-bg: #f0fdf4; --status-text: #166534; --status-border: #86efac; }
+.status-rejected      { --status-bg: #fef2f2; --status-text: #dc2626; --status-border: #fecaca; }
+
+/* ─── Phone frame & scrollbar hide ──────────────────────────────────────── */
+
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ─── Glass card effect ──────────────────────────────────────────────────── */
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.dark .glass-card {
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Impact score gradient ──────────────────────────────────────────────── */
+
+.impact-high   { background: linear-gradient(135deg, #fef2f2, #fee2e2); color: #dc2626; }
+.impact-medium { background: linear-gradient(135deg, #fff7ed, #ffedd5); color: #ea580c; }
+.impact-low    { background: linear-gradient(135deg, #f0fdf4, #dcfce7); color: #16a34a; }
+
+/* ─── AI accent color (blue — signals AI elements) ───────────────────────── */
+
+.ai-accent     { color: #2563eb; }
+.ai-accent-bg  { background-color: #eff6ff; border-color: #bfdbfe; }
+
+/* ─── Government badge ───────────────────────────────────────────────────── */
+
+.gov-badge {
+  background: linear-gradient(135deg, #166534, #15803d);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ─── Touch target minimum size ─────────────────────────────────────────── */
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ─── Transitions ────────────────────────────────────────────────────────── */
+
+.transition-fast { transition: all 0.15s ease; }
+.transition-std  { transition: all 0.25s ease; }
+
+/* ─── Active press feedback ──────────────────────────────────────────────── */
+
+.active-press:active { transform: scale(0.97); }
