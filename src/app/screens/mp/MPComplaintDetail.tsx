@@ -30,7 +30,6 @@ const DEPARTMENTS: { value: Department; label: string; icon: string }[] = [
 ];
 
 const STATUS_ACTIONS: { status: ComplaintStatus; label: string; color: string }[] = [
-  { status: "assigned",    label: "Mark Assigned",    color: "bg-purple-500" },
   { status: "in_progress", label: "Mark In Progress", color: "bg-blue-500" },
   { status: "resolved",    label: "Mark Resolved",    color: "bg-green-500" },
   { status: "rejected",    label: "Reject",           color: "bg-red-500" },
@@ -68,11 +67,10 @@ export function MPComplaintDetail({ complaint: initialComplaint, onBack, onUpdat
   const handleStatusUpdate = (status: ComplaintStatus) => {
     setUpdating(true);
     const messages: Record<ComplaintStatus, string> = {
-      assigned: "Assigned to department by MP.",
       in_progress: "Work started on this complaint.",
       resolved: "Issue resolved and closed.",
       rejected: "Complaint rejected after review.",
-      submitted: "", ai_processing: "", pending_review: "", duplicate: "",
+      submitted: "", ai_processing: "", duplicate: "",
     };
     const updated = complaintService.updateStatus(complaint.id, status, messages[status] ?? "Status updated.", "mp_001");
     if (updated) {

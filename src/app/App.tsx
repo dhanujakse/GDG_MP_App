@@ -107,8 +107,8 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   if (step === 0) return (
     <div className="flex flex-col h-full overflow-y-auto px-5 pt-8 pb-6 animate-fadeIn scrollbar-none">
       <div className="mb-6">
-        <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center mb-4">
-          <span className="text-white font-black text-sm">CC</span>
+        <div className="mb-4">
+          <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-1" style={DF}>Choose Language</h1>
         <p className="text-sm text-muted-foreground">Select your preferred language · अपनी भाषा चुनें</p>
@@ -277,10 +277,10 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
       </div>
       <div>
         <div className="flex items-center justify-center gap-2 mb-3">
-          <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-white font-black text-[10px]">JV</span>
+          <div className="w-10 h-10 flex items-center justify-center">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <span className="text-xs font-bold text-primary uppercase tracking-wider">JanVaani</span>
+          <span className="text-xs font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2" style={DF}>
           {role === "citizen" ? "You're all set!" : "Dashboard access granted"}
@@ -492,10 +492,8 @@ function MPDashboard({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) 
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 mb-0.5">
-              <div className="w-5 h-5 rounded bg-primary flex items-center justify-center">
-                <span className="text-white font-black text-[9px]">AI</span>
-              </div>
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">JanVaani</span>
+              <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
+              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
             </div>
             <h1 className="text-[20px] font-bold text-foreground leading-tight" style={DF}>Dr. Rajesh Kumar</h1>
             <p className="text-xs text-muted-foreground">MP · Madurai Central</p>
@@ -858,7 +856,7 @@ export default function App() {
       </div>
 
       <p className="mt-6 text-xs text-slate-400 font-medium text-center">
-        JanVaani · Government-Grade Civic Platform · AI-Powered
+        {import.meta.env.VITE_APP_NAME || "JanVaani"} · Government-Grade Civic Platform · AI-Powered
       </p>
     </div>
   );

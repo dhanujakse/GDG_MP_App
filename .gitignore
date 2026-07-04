@@ -28,3 +28,8 @@ dist-ssr/
 # System Files
 .DS_Store
 Thumbs.db
+
+# Env files
+.env
+.env.*
+!.env.example

@@ -22,7 +22,8 @@ import type {
   AIPipelineStepResult,
 } from "@/types";
 
-const USE_REAL_AI = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
+const USE_REAL_AI = Boolean(import.meta.env.VITE_OPENAI_API_KEY) || Boolean(import.meta.env.VITE_GEMINI_API_KEY);
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -87,43 +88,84 @@ export async function analyzeComplaintImage(
   hintCategory?: ComplaintCategory
 ): Promise<AIImageAnalysis> {
   if (USE_REAL_AI) {
-    // Real implementation shape — wire to OpenAI Vision API
     const base64 = await fileToBase64(file);
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `You are an AI for an Indian civic complaint platform. Analyze this image and return JSON with:
+    if (GEMINI_API_KEY) {
+      const base64Data = base64.split(",")[1];
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
                 {
-                  "detectedCategory": one of [water, sanitation, roads, electricity, drainage, healthcare, education, transport, other],
-                  "detectedObjects": [list of objects you see],
-                  "confidence": 0.0-1.0,
-                  "severity": one of [critical, high, medium, low],
-                  "rawLabels": [raw detected labels]
-                }
-                Be conservative with severity. Only use "critical" for life-threatening situations.`,
-              },
-              { type: "image_url", image_url: { url: base64, detail: "low" } },
-            ],
+                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and return JSON with:
+                  {
+                    "detectedCategory": "water" | "sanitation" | "roads" | "electricity" | "drainage" | "healthcare" | "education" | "transport" | "other",
+                    "detectedObjects": string[],
+                    "confidence": number, // 0.0-1.0
+                    "severity": "critical" | "high" | "medium" | "low",
+                    "rawLabels": string[]
+                  }
+                  Be conservative with severity. Only use "critical" for life-threatening situations.`,
+                },
+                {
+                  inlineData: {
+                    mimeType: file.type || "image/jpeg",
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
           },
-        ],
-        max_tokens: 300,
-        response_format: { type: "json_object" },
-      }),
-    });
-    const data = await response.json();
-    const result = JSON.parse(data.choices[0].message.content);
-    return { ...result, processingTimeMs: 0 };
+        }),
+      });
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
+      const result = JSON.parse(text);
+      return { ...result, processingTimeMs: 0 };
+    } else {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `You are an AI for an Indian civic complaint platform. Analyze this image and return JSON with:
+                  {
+                    "detectedCategory": one of [water, sanitation, roads, electricity, drainage, healthcare, education, transport, other],
+                    "detectedObjects": [list of objects you see],
+                    "confidence": 0.0-1.0,
+                    "severity": one of [critical, high, medium, low],
+                    "rawLabels": [raw detected labels]
+                  }
+                  Be conservative with severity. Only use "critical" for life-threatening situations.`,
+                },
+                { type: "image_url", image_url: { url: base64, detail: "low" } },
+              ],
+            },
+          ],
+          max_tokens: 300,
+          response_format: { type: "json_object" },
+        }),
+      });
+      const data = await response.json();
+      const result = JSON.parse(data.choices[0].message.content);
+      return { ...result, processingTimeMs: 0 };
+    }
   }
 
   // ─── Production-quality mock ──────────────────────────────────────────────
@@ -154,17 +196,48 @@ export async function analyzeComplaintImage(
  */
 export async function transcribeSpeech(audio: Blob): Promise<string> {
   if (USE_REAL_AI) {
-    const formData = new FormData();
-    formData.append("file", audio, "recording.webm");
-    formData.append("model", "whisper-1");
-    formData.append("language", "hi"); // default; real app sends user's lang
-    const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}` },
-      body: formData,
-    });
-    const data = await response.json();
-    return data.text;
+    if (GEMINI_API_KEY) {
+      const base64 = await fileToBase64(audio as File);
+      const base64Data = base64.split(",")[1];
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: "Transcribe the following audio recording to text. Only return the transcription, nothing else. If it is in Hindi, transcribe it in Hindi. If it is in English, transcribe it in English.",
+                },
+                {
+                  inlineData: {
+                    mimeType: audio.type || "audio/webm",
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      });
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
+      return text.trim();
+    } else {
+      const formData = new FormData();
+      formData.append("file", audio, "recording.webm");
+      formData.append("model", "whisper-1");
+      formData.append("language", "hi"); // default; real app sends user's lang
+      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}` },
+        body: formData,
+      });
+      const data = await response.json();
+      return data.text;
+    }
   }
 
   await simulatedDelay(1000, 2000);
@@ -221,50 +294,101 @@ export async function analyzeComplaint(params: {
 }): Promise<AIComplaintAnalysis> {
   if (USE_REAL_AI) {
     const start = Date.now();
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: `You are an AI for the Indian government civic complaint platform "Civic Connect AI". 
-            Analyze complaints and return structured JSON. Be concise. Do not invent facts.
-            Mark uncertain fields with low confidence scores.`,
-          },
-          {
-            role: "user",
-            content: `Complaint: "${params.description}"
-            Location: ${params.location.ward}, ${params.location.district}
-            Image analysis: ${params.imageAnalysis ? JSON.stringify(params.imageAnalysis) : "None"}
-            Citizens joined: ${params.citizensJoined ?? 1}
-            
-            Return JSON with:
+    const appName = import.meta.env.VITE_APP_NAME || "Civic Connect AI";
+    if (GEMINI_API_KEY) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
             {
-              "detectedCategory": [one of: water/sanitation/roads/electricity/drainage/healthcare/education/transport/other],
-              "suggestedDepartment": [department slug],
-              "severity": [critical/high/medium/low],
-              "confidenceScore": 0.0-1.0,
-              "citizenSummary": "Simple 1-2 sentence summary for the citizen in plain language",
-              "mpSummary": "Max 50 words. Urgency + action + department for MP",
-              "governmentNote": "Internal technical note for officials",
-              "suggestedAction": "Specific recommended next action",
-              "keyFacts": ["fact1", "fact2", "fact3"],
-              "aiReasoning": "Brief explanation of how severity/category was determined"
-            }`,
+              role: "user",
+              parts: [
+                {
+                  text: `You are an AI for the Indian government civic complaint platform "${appName}". 
+                  Analyze complaints and return structured JSON. Be concise. Do not invent facts.
+                  Mark uncertain fields with low confidence scores.
+                  
+                  Complaint: "${params.description}"
+                  Location: ${params.location.ward}, ${params.location.district}
+                  Image analysis: ${params.imageAnalysis ? JSON.stringify(params.imageAnalysis) : "None"}
+                  Citizens joined: ${params.citizensJoined ?? 1}
+                  
+                  Return JSON with the following schema:
+                  {
+                    "detectedCategory": "water" | "sanitation" | "roads" | "electricity" | "drainage" | "healthcare" | "education" | "transport" | "other",
+                    "suggestedDepartment": "water_board" | "sanitation" | "public_works" | "electricity_board" | "storm_water" | "health" | "education" | "transport" | "general",
+                    "severity": "critical" | "high" | "medium" | "low",
+                    "confidenceScore": number,
+                    "citizenSummary": string,
+                    "mpSummary": string,
+                    "governmentNote": string,
+                    "suggestedAction": string,
+                    "keyFacts": string[],
+                    "aiReasoning": string
+                  }
+                  Ensure the response is valid JSON.`,
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
           },
-        ],
-        max_tokens: 800,
-        response_format: { type: "json_object" },
-      }),
-    });
-    const data = await response.json();
-    const result = JSON.parse(data.choices[0].message.content);
-    return { ...result, processingTimeMs: Date.now() - start };
+        }),
+      });
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
+      const result = JSON.parse(text);
+      return { ...result, processingTimeMs: Date.now() - start };
+    } else {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI for the Indian government civic complaint platform "${appName}". 
+              Analyze complaints and return structured JSON. Be concise. Do not invent facts.
+              Mark uncertain fields with low confidence scores.`,
+            },
+            {
+              role: "user",
+              content: `Complaint: "${params.description}"
+              Location: ${params.location.ward}, ${params.location.district}
+              Image analysis: ${params.imageAnalysis ? JSON.stringify(params.imageAnalysis) : "None"}
+              Citizens joined: ${params.citizensJoined ?? 1}
+              
+              Return JSON with:
+              {
+                "detectedCategory": [one of: water/sanitation/roads/electricity/drainage/healthcare/education/transport/other],
+                "suggestedDepartment": [department slug],
+                "severity": [critical/high/medium/low],
+                "confidenceScore": 0.0-1.0,
+                "citizenSummary": "Simple 1-2 sentence summary for the citizen in plain language",
+                "mpSummary": "Max 50 words. Urgency + action + department for MP",
+                "governmentNote": "Internal technical note for officials",
+                "suggestedAction": "Specific recommended next action",
+                "keyFacts": ["fact1", "fact2", "fact3"],
+                "aiReasoning": "Brief explanation of how severity/category was determined"
+              }`,
+            },
+          ],
+          max_tokens: 800,
+          response_format: { type: "json_object" },
+        }),
+      });
+      const data = await response.json();
+      const result = JSON.parse(data.choices[0].message.content);
+      return { ...result, processingTimeMs: Date.now() - start };
+    }
   }
 
   // ─── Production-quality mock ──────────────────────────────────────────────

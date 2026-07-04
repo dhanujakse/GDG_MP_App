@@ -56,7 +56,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     statusHistory: [
       { id: "su_001", status: "submitted", message: "Complaint received and logged.", updatedBy: "system", updatedAt: "2024-07-01T08:00:00Z", isPublic: true },
       { id: "su_002", status: "ai_processing", message: "AI is analysing your complaint.", updatedBy: "ai", updatedAt: "2024-07-01T08:00:10Z", isPublic: true },
-      { id: "su_003", status: "assigned", message: "Forwarded to Water Board.", updatedBy: "mp_001", updatedAt: "2024-07-01T09:30:00Z", isPublic: true },
+      { id: "su_003", status: "in_progress", message: "Forwarded to Water Board.", updatedBy: "mp_001", updatedAt: "2024-07-01T09:30:00Z", isPublic: true },
       { id: "su_004", status: "in_progress", message: "Water Board team dispatched.", updatedBy: "dept_001", updatedAt: "2024-07-02T10:30:00Z", isPublic: true },
     ],
     assignedDepartment: "water_board",
@@ -70,7 +70,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     title: "Garbage Not Collected — 5 Days",
     description: "Garbage bins are overflowing and have not been collected for 5 days. The smell is unbearable and is a health hazard for the residents.",
     category: "sanitation",
-    status: "assigned",
+    status: "in_progress",
     severity: "high",
     location: { lat: 9.9185, lng: 78.1120, address: "Gandhi Nagar, Ward 11", ward: "Ward 11", district: "Madurai" },
     photos: [],
@@ -95,7 +95,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     impactScore: { total: 78, breakdown: { severity: 28, citizensAffected: 16, timeOpen: 12, emergencyLevel: 10, infrastructureImportance: 5, populationDensity: 5 }, explanation: "Score 78/100. High severity (+28), 16 citizens joined (+16). High priority." },
     statusHistory: [
       { id: "su_005", status: "submitted", message: "Complaint received.", updatedBy: "system", updatedAt: "2024-06-29T07:00:00Z", isPublic: true },
-      { id: "su_006", status: "assigned", message: "Forwarded to Sanitation Dept.", updatedBy: "mp_001", updatedAt: "2024-06-30T11:00:00Z", isPublic: true },
+      { id: "su_006", status: "in_progress", message: "Forwarded to Sanitation Dept.", updatedBy: "mp_001", updatedAt: "2024-06-30T11:00:00Z", isPublic: true },
     ],
     assignedDepartment: "sanitation",
     ward: "Ward 11",
@@ -130,7 +130,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     title: "Open Sewage on MG Road",
     description: "Open sewage is flowing on MG Road near the bus stop. It is a serious health hazard.",
     category: "drainage",
-    status: "pending_review",
+    status: "submitted",
     severity: "critical",
     location: { lat: 9.9260, lng: 78.1300, address: "MG Road, Ward 8", ward: "Ward 8", district: "Madurai" },
     photos: [],
@@ -155,7 +155,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     impactScore: { total: 87, breakdown: { severity: 40, citizensAffected: 20, timeOpen: 8, emergencyLevel: 15, infrastructureImportance: 10, populationDensity: 5 }, explanation: "Score 87/100. Critical severity, 32 citizens affected. Immediate action required." },
     statusHistory: [
       { id: "su_008", status: "submitted", message: "Complaint received.", updatedBy: "system", updatedAt: "2024-07-03T09:00:00Z", isPublic: true },
-      { id: "su_009", status: "pending_review", message: "Under MP review.", updatedBy: "ai", updatedAt: "2024-07-03T09:30:00Z", isPublic: false },
+      { id: "su_009", status: "submitted", message: "Under review.", updatedBy: "ai", updatedAt: "2024-07-03T09:30:00Z", isPublic: false },
     ],
     ward: "Ward 8",
     district: "Madurai",
@@ -167,7 +167,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     title: "Street Lights Dead — Entire Block",
     description: "All street lights on Anna Nagar Main Street have been non-functional for a week.",
     category: "electricity",
-    status: "assigned",
+    status: "in_progress",
     severity: "high",
     location: { lat: 9.9150, lng: 78.1080, address: "Anna Nagar, Ward 14", ward: "Ward 14", district: "Madurai" },
     photos: [],
@@ -179,7 +179,7 @@ const SEED_COMPLAINTS: Complaint[] = [
     impactScore: { total: 71, breakdown: { severity: 28, citizensAffected: 8, timeOpen: 10, emergencyLevel: 10, infrastructureImportance: 10, populationDensity: 5 }, explanation: "Score 71/100. High severity, 9 citizens affected. High priority." },
     statusHistory: [
       { id: "su_010", status: "submitted", message: "Complaint received.", updatedBy: "system", updatedAt: "2024-07-02T20:00:00Z", isPublic: true },
-      { id: "su_011", status: "assigned", message: "Forwarded to Electricity Board.", updatedBy: "mp_001", updatedAt: "2024-07-03T08:00:00Z", isPublic: true },
+      { id: "su_011", status: "in_progress", message: "Forwarded to Electricity Board.", updatedBy: "mp_001", updatedAt: "2024-07-03T08:00:00Z", isPublic: true },
     ],
     assignedDepartment: "electricity_board",
     ward: "Ward 14",
@@ -194,7 +194,36 @@ function loadComplaints(): Complaint[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initSeedData();
-    return JSON.parse(raw) as Complaint[];
+    const complaints = JSON.parse(raw) as Complaint[];
+    
+    // Migrate legacy status values from localStorage
+    let migrated = false;
+    complaints.forEach((c) => {
+      if ((c.status as string) === "pending_review") {
+        c.status = "submitted";
+        migrated = true;
+      } else if ((c.status as string) === "assigned") {
+        c.status = "in_progress";
+        migrated = true;
+      }
+      if (c.statusHistory) {
+        c.statusHistory.forEach((sh) => {
+          if ((sh.status as string) === "pending_review") {
+            sh.status = "submitted";
+            migrated = true;
+          } else if ((sh.status as string) === "assigned") {
+            sh.status = "in_progress";
+            migrated = true;
+          }
+        });
+      }
+    });
+    
+    if (migrated) {
+      saveComplaints(complaints);
+    }
+    
+    return complaints;
   } catch {
     return initSeedData();
   }
@@ -317,12 +346,12 @@ export const complaintService = {
       category: analysis.detectedCategory,
       severity: analysis.severity,
       assignedDepartment: analysis.suggestedDepartment,
-      status: "pending_review",
+      status: "submitted",
       title: `${analysis.detectedCategory.charAt(0).toUpperCase() + analysis.detectedCategory.slice(1)} Issue — ${complaints[idx].ward}`,
       updatedAt: now,
       statusHistory: [
         ...complaints[idx].statusHistory,
-        { id: `su_${Date.now()}`, status: "pending_review", message: "AI analysis complete. Pending MP review.", updatedBy: "ai", updatedAt: now, isPublic: true },
+        { id: `su_${Date.now()}`, status: "submitted", message: "AI analysis complete. Under review.", updatedBy: "ai", updatedAt: now, isPublic: true },
       ],
     };
     saveComplaints(complaints);
@@ -370,11 +399,11 @@ export const complaintService = {
     if (idx === -1) return null;
     const now = new Date().toISOString();
     complaints[idx].assignedDepartment = department;
-    complaints[idx].status = "assigned";
+    complaints[idx].status = "in_progress";
     complaints[idx].updatedAt = now;
     complaints[idx].statusHistory.push({
       id: `su_${Date.now()}`,
-      status: "assigned",
+      status: "in_progress",
       message: `Forwarded to ${department.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}.`,
       updatedBy: mpId,
       updatedAt: now,
@@ -403,8 +432,8 @@ export const complaintService = {
       total: all.length,
       critical: all.filter((c) => c.severity === "critical" && c.status !== "resolved").length,
       resolved: all.filter((c) => c.status === "resolved").length,
-      pending: all.filter((c) => c.status === "submitted" || c.status === "pending_review").length,
-      inProgress: all.filter((c) => c.status === "in_progress" || c.status === "assigned").length,
+      pending: all.filter((c) => c.status === "submitted").length,
+      inProgress: all.filter((c) => c.status === "in_progress").length,
       byCategory,
       avgResolutionHours: 36,
     };
