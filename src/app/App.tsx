@@ -27,7 +27,7 @@ import { SeverityBadge } from "@/app/components/shared/SeverityBadge";
 import { StatusBadge } from "@/app/components/shared/StatusBadge";
 import { CategoryIcon, getCategoryLabel, getCategoryEmoji } from "@/app/components/shared/CategoryIcon";
 import { ImpactScoreMeter } from "@/app/components/shared/ImpactScoreMeter";
-import type { Complaint, ComplaintSummary, ComplaintStatus } from "@/types";
+import type { Complaint, ComplaintSummary, ComplaintStatus, ComplaintCategory } from "@/types";
 
 type Phase = "onboard" | "citizen" | "mp";
 type CitizenTab = "home" | "report" | "complaints" | "profile" | "detail";
@@ -884,7 +884,6 @@ export default function App() {
                     setTab={setCitizenTab}
                     onBellClick={() => setShowNotifications(true)}
                     unreadCount={notifications.filter(n => n.unread).length}
-                    onBack={() => setPhase("onboard")}
                   />
                 )}
                 {citizenTab === "report" && (
