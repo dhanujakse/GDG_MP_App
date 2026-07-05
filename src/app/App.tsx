@@ -572,11 +572,6 @@ function CitizenProfile({ onLogout, onBack, onSelect, setTab }: { onLogout: () =
             <span className="text-sm font-semibold text-foreground">Complaints Joined</span>
             <span className="text-sm font-bold text-foreground bg-secondary px-2.5 py-0.5 rounded-full">{joinedComplaints.length}</span>
           </button>
-          <div className="border-t border-border" />
-          <div className="w-full flex items-center justify-between py-3 px-1.5">
-            <span className="text-sm font-semibold text-foreground">Issues Resolved</span>
-            <span className="text-sm font-bold text-foreground bg-secondary px-2.5 py-0.5 rounded-full">{resolvedCount}</span>
-          </div>
         </div>
 
         <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm border border-red-100">
