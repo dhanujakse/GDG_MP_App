@@ -8,16 +8,60 @@
       <title>JanVaani · Citizen App</title>
       <meta name="description" content="Submit civic complaints directly to your local representative and get updates." />
       <meta name="robots" content="noindex, nofollow" />
-      <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
+      <style>
+        html, body { height: 100%; margin: 0; }
+        #root { height: 100%; }
+        
+        /* Hide Google Translate top frame banner and clean up body placement */
+        .goog-te-banner-frame.skiptranslate,
+        .goog-te-banner-frame,
+        .goog-te-banner,
+        iframe.goog-te-banner-frame {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        body {
+          top: 0px !important;
+        }
+        /* Hide translation suggestion tooltip popup on hover */
+        .goog-tooltip,
+        .goog-tooltip:hover,
+        #goog-gt-tt,
+        .goog-te-balloon-frame {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        .goog-text-highlight {
+          background-color: transparent !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
+        /* Hide Google Translate widget dropdown branding */
+        #google_translate_element {
+          display: none !important;
+          visibility: hidden !important;
+        }
+      </style>
       <script src="https://docs.opencv.org/4.5.5/opencv.js" async type="text/javascript"></script>
       
+      <!-- Google Translate Callback and Script -->
+      <script type="text/javascript">
+        function googleTranslateElementInit() {
+          new google.translate.TranslateElement({
+            pageLanguage: 'en',
+            includedLanguages: 'hi,en,bn,mr,te,ta,gu,ur,kn,or,ml,pa',
+            layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+            autoDisplay: false
+          }, 'google_translate_element');
+        }
+      </script>
+      <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
     </head>
 
     <body>
-      
+      <div id="google_translate_element"></div>
       <div id="root"></div>
       <script type="module" src="/src/main.tsx"></script>
-      
     </body>
   </html>
   
