@@ -45,7 +45,7 @@ Every photo submitted by a citizen is automatically screened by the AI pipeline 
     <th align="center">❌ Validation Failed</th>
   </tr>
   <tr>
-    <td align="center"><img src="confirmed.png" alt="AI image validation passed" width="200"/></td>
+    <td align="center"><img src="confirmed.png" alt="AI image validation passed" width="200"/></td>/t/t/t/t/t/t/t/t
     <td align="center"><img src="error.png" alt="AI image validation failed" width="200"/></td>
   </tr>
 </table>
