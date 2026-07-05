@@ -7,7 +7,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   ChevronLeft, Plus, Camera, Mic, Type, MapPin, CheckCircle,
   Share2, Copy, StopCircle, RotateCcw, AlertTriangle, Users,
-  Loader2, Sparkles, Upload
+  Loader2, Sparkles, Upload, Send
 } from "lucide-react";
 import {
   analyzeComplaintImage,
@@ -141,6 +141,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
   const [opencvEdgePreview, setOpencvEdgePreview] = useState<string | null>(null);
   const [opencvStats, setOpencvStats] = useState<string | null>(null);
   const [imageIsValidated, setImageIsValidated] = useState(false);
+  const [descError, setDescError] = useState<string | null>(null);
 
   // Voice recording states
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -308,6 +309,19 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
 
   const runFullAIPipeline = useCallback(async () => {
     if (!category) return;
+    
+    const cleanDesc = description.trim();
+    const uniqueChars = new Set(cleanDesc.toLowerCase().replace(/[^a-z0-9]/g, ""));
+    const gibberish = ["asdf", "qwer", "zxcv", "abcd", "xyz", "1234"];
+    const isGibberish = gibberish.some(pattern => cleanDesc.toLowerCase().includes(pattern) && cleanDesc.length < 30);
+    
+    if (cleanDesc.length < 15 || uniqueChars.size < 5 || isGibberish) {
+      setDescError("Please provide a meaningful, detailed description of the issue. Avoid random text or too short descriptions.");
+      setStep(1);
+      return;
+    }
+    
+    setDescError(null);
     setStep(3);
     setAiSteps([]);
 
@@ -410,7 +424,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
     setTimeout(() => setCopied(false), 2000);
   }, [shortId]);
 
-  const STEPS = ["Category", "Photo", "Describe", "AI Analysis", "Review", "Done"];
+  const STEPS = ["Category", "Describe", "Review", "Processing", "Duplicate", "Done"];
 
   // ── Step 5: Success ────────────────────────────────────────────────────────
   if (step === 5) return (
@@ -527,7 +541,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
   // ── Step 3: AI Processing ──────────────────────────────────────────────────
   if (step === 3) return (
     <div className="flex flex-col h-full px-5 pt-6 pb-5 animate-fadeIn">
-      <h1 className="text-xl font-bold text-foreground mb-1" style={DF}>AI is Working…</h1>
+      <h1 className="text-xl font-bold text-foreground mb-1" style={DF}>Processing Report…</h1>
       <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
         Your complaint is being automatically classified, checked for duplicates, and prioritised.
       </p>
@@ -580,9 +594,11 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
           </button>
           <div className="flex-1">
             <h1 className="text-lg font-bold text-foreground" style={DF}>Report Problem</h1>
-            <p className="text-[10px] text-muted-foreground font-medium">
-              Step {step + 1} of 3 — {STEPS[step]}
-            </p>
+            {step < 3 && (
+              <p className="text-[10px] text-muted-foreground font-medium">
+                Step {step + 1} of 3 — {STEPS[step]}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -628,103 +644,25 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
           </div>
         )}
 
-        {/* Step 1 — Photo capturing & validation */}
+        {/* Step 1 — Description & Optional Photo */}
         {step === 1 && (
-          <div className="animate-fadeIn mt-2 flex flex-col gap-3">
-            <p className="text-sm text-muted-foreground">
-              Provide a photo of the {category} issue. Images are strictly validated before submission.
+          <div className="animate-fadeIn mt-2 space-y-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Describe the problem in your own words, and optionally attach a photo.
             </p>
 
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
-
-            {/* Preview & OpenCV overlay block */}
-            {photoPreview ? (
-              <div className="space-y-3">
-                <div className="relative rounded-2xl overflow-hidden border border-border bg-slate-100">
-                  <img src={photoPreview} alt="Original complaint" className="w-full h-44 object-cover" />
+            {descError && (
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl flex gap-2">
+                <AlertTriangle size={15} className="text-red-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-[10px] font-bold text-red-800">Invalid Description</p>
+                  <p className="text-[9px] text-red-600 mt-0.5 leading-relaxed">{descError}</p>
                 </div>
-
-                {/* Validation Results overlay */}
-                {isValidatingImage && (
-                  <div className="p-4 bg-secondary border border-border rounded-2xl flex flex-col items-center justify-center gap-2">
-                    <Loader2 size={20} className="text-primary animate-spin" />
-                    <p className="text-xs font-bold text-foreground">Verifying photo...</p>
-                    <p className="text-[10px] text-muted-foreground">Checking image clarity and category match</p>
-                  </div>
-                )}
-
-                {imageValidationError && (
-                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-left flex gap-2">
-                    <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-bold text-red-800">Photo Verification Unsuccessful</p>
-                      <p className="text-[10px] text-red-600 mt-0.5 leading-relaxed">{imageValidationError}</p>
-                    </div>
-                  </div>
-                )}
-
-                {imageIsValidated && (
-                  <div className="p-3.5 bg-green-50 border border-green-200 rounded-2xl text-left flex gap-2 items-center">
-                    <CheckCircle size={16} className="text-green-500 shrink-0" />
-                    <div>
-                      <p className="text-xs font-bold text-green-800">Photo Verified Successfully</p>
-                      <p className="text-[10px] text-green-600 mt-0.5">Image verified. Advancing to description...</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-2">
-                  <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setOpencvEdgePreview(null); setOpencvStats(null); setImageValidationError(null); setImageIsValidated(false); }}
-                    className="flex-1 py-3 bg-secondary text-foreground text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 font-semibold">
-                    <RotateCcw size={13} /> Retake
-                  </button>
-                  {imageIsValidated && (
-                    <button onClick={() => setStep(2)}
-                      className="flex-1 py-3 bg-primary text-white text-xs font-bold rounded-xl">
-                      Continue
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 mt-1">
-                  <button onClick={startLiveCamera}
-                    className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Camera size={20} className="text-primary" />
-                    </div>
-                    <p className="text-xs font-bold text-foreground">Live Camera</p>
-                    <p className="text-[9px] text-muted-foreground">Capture matching photo</p>
-                  </button>
-
-                  <button onClick={() => fileInputRef.current?.click()}
-                    className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Upload size={20} className="text-primary" />
-                    </div>
-                    <p className="text-xs font-bold text-foreground">Local Folder</p>
-                    <p className="text-[9px] text-muted-foreground">Upload from storage</p>
-                  </button>
-                </div>
-                <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setStep(2); }}
-                  className="w-full py-3.5 bg-secondary hover:bg-slate-200/60 text-foreground font-bold rounded-2xl text-xs transition-all active-press" style={DF}>
-                  Continue Without Photo
-                </button>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Step 2 — Description (Voice Enabled) */}
-        {step === 2 && (
-          <div className="animate-fadeIn mt-2">
-            <p className="text-sm text-muted-foreground mb-4">
-              Describe the problem in your own words, or use voice.
-            </p>
 
             {/* Mode tabs */}
-            <div className="flex gap-2 mb-4 p-1 bg-secondary rounded-xl">
+            <div className="flex gap-2 p-1 bg-secondary rounded-xl">
               {(["type", "speak"] as const).map((m) => (
                 <button key={m} onClick={() => setDescMode(m)}
                   className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -736,24 +674,16 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
               ))}
             </div>
 
-            {/* Validate/transcribe loader */}
-            {isValidatingImage && (
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex flex-col items-center justify-center gap-2 mb-4">
-                <Loader2 size={18} className="text-primary animate-spin" />
-                <p className="text-xs font-bold text-blue-700">Gemini transcribing voice recording...</p>
-              </div>
-            )}
-
             {descMode === "type" && (
               <textarea value={description} onChange={(e) => setDescription(e.target.value)}
                 placeholder="Describe the issue clearly. e.g. 'Water pipe burst on main road, no supply for 3 days in our area.'"
-                rows={5}
-                className="w-full p-4 bg-secondary rounded-2xl text-xs text-foreground placeholder:text-muted-foreground resize-none outline-none border border-border focus:border-primary/40 transition-colors"
+                rows={4}
+                className="w-full p-4 bg-secondary rounded-2xl text-xs text-foreground placeholder:text-muted-foreground resize-none outline-none border border-border focus:border-primary/40 transition-colors font-medium"
               />
             )}
 
             {descMode === "speak" && (
-              <div className="flex flex-col items-center gap-4 py-6 bg-secondary rounded-2xl border border-border">
+              <div className="flex flex-col items-center gap-4 py-5 bg-secondary rounded-2xl border border-border">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
                   isRecording ? "bg-red-100 animate-pulse" : "bg-primary/10"
                 }`}>
@@ -763,7 +693,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
                   <p className="text-xs font-bold text-foreground">
                     {isRecording ? "Recording… speak clearly" : "Speak in your preferred language"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">
                     {isRecording ? "AI will transcribe details" : "Transcribes English, Hindi, Tamil, Telugu, etc."}
                   </p>
                 </div>
@@ -785,16 +715,117 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
               </div>
             )}
 
+            {/* Optional Photo Attachment Section */}
+            <div className="border border-border rounded-2xl p-4 bg-card space-y-3">
+              <p className="text-xs font-bold text-foreground" style={DF}>Attach Photo (Optional)</p>
+              
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+
+              {photoPreview ? (
+                <div className="space-y-3">
+                  <div className="relative rounded-xl overflow-hidden border border-border bg-slate-100 h-32">
+                    <img src={photoPreview} alt="Issue preview" className="w-full h-full object-cover" />
+                  </div>
+
+                  {isValidatingImage && (
+                    <div className="p-3 bg-secondary border border-border rounded-xl flex items-center justify-center gap-2">
+                      <Loader2 size={15} className="text-primary animate-spin" />
+                      <span className="text-[10px] font-bold text-foreground">Verifying photo...</span>
+                    </div>
+                  )}
+
+                  {imageValidationError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex gap-2">
+                      <AlertTriangle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-[10px] font-bold text-red-800">Photo Verification Unsuccessful</p>
+                        <p className="text-[9px] text-red-600 mt-0.5 leading-tight">{imageValidationError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {imageIsValidated && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl flex gap-2 items-center">
+                      <CheckCircle size={14} className="text-green-500 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-bold text-green-800">Photo Verified Successfully</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setOpencvEdgePreview(null); setOpencvStats(null); setImageValidationError(null); setImageIsValidated(false); }}
+                    className="w-full py-2 bg-secondary text-foreground text-[10px] font-bold rounded-xl flex items-center justify-center gap-1.5">
+                    <RotateCcw size={11} /> Remove Photo
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button onClick={startLiveCamera}
+                    className="py-4 bg-secondary border border-dashed border-primary/20 rounded-xl flex flex-col items-center justify-center gap-1 active-press hover:bg-primary/5 transition-all">
+                    <Camera size={16} className="text-primary" />
+                    <span className="text-[10px] font-bold text-foreground">Camera</span>
+                  </button>
+
+                  <button onClick={() => fileInputRef.current?.click()}
+                    className="py-4 bg-secondary border border-dashed border-primary/20 rounded-xl flex flex-col items-center justify-center gap-1 active-press hover:bg-primary/5 transition-all">
+                    <Upload size={16} className="text-primary" />
+                    <span className="text-[10px] font-bold text-foreground">Upload</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
-              onClick={runFullAIPipeline}
-              disabled={!description && !photoFile}
-              className={`w-full py-4 rounded-2xl font-bold mt-4 transition-all flex items-center justify-center gap-2 ${
-                description || photoFile
-                  ? "bg-primary text-white active-press"
+              onClick={() => setStep(2)}
+              disabled={!description.trim() || isValidatingImage || (photoFile !== null && !imageIsValidated)}
+              className={`w-full py-3.5 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${
+                description.trim() && !isValidatingImage && (photoFile === null || imageIsValidated)
+                  ? "bg-primary text-white active-press shadow-sm"
                   : "bg-secondary text-muted-foreground cursor-not-allowed"
               }`} style={DF}>
-              <span>🤖</span>
-              Submit & Analyse with AI
+              Review Details
+            </button>
+          </div>
+        )}
+
+        {/* Step 2 — Review Screen */}
+        {step === 2 && (
+          <div className="animate-fadeIn mt-2 space-y-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Verify your grievance details before official submission.
+            </p>
+
+            <div className="space-y-3.5 bg-card border border-border rounded-2xl p-4">
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1.5">Grievance Category</p>
+                <div className="flex items-center gap-2.5 bg-secondary p-3 rounded-xl border border-border">
+                  <CategoryIcon category={category as ComplaintCategory} size={15} showBg bgSize="w-8 h-8" />
+                  <span className="text-xs font-bold text-foreground capitalize">{category}</span>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1.5">Description Details</p>
+                <p className="text-xs text-foreground leading-relaxed bg-secondary p-3 rounded-xl border border-border max-h-36 overflow-y-auto whitespace-pre-wrap font-medium">
+                  {description}
+                </p>
+              </div>
+
+              {photoPreview && (
+                <div>
+                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-1.5">Attached Photo</p>
+                  <div className="relative rounded-xl overflow-hidden border border-border bg-slate-100 h-32">
+                    <img src={photoPreview} alt="Issue preview" className="w-full h-full object-cover" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              onClick={runFullAIPipeline}
+              className="w-full py-3.5 bg-primary text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active-press shadow-sm animate-pulse" style={DF}>
+              <Send size={14} />
+              Submit Grievance
             </button>
           </div>
         )}

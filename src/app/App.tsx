@@ -79,6 +79,32 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   const [ward, setWard] = useState(() => localStorage.getItem("onboard_ward") || "");
   const [name, setName] = useState(() => localStorage.getItem("onboard_name") || "");
 
+  const [wardNumber, setWardNumber] = useState(() => {
+    const saved = localStorage.getItem("onboard_ward") || "";
+    if (saved.includes("Ward ")) {
+      const parts = saved.split(", ");
+      return parts[parts.length - 1];
+    }
+    return "";
+  });
+  const [areaName, setAreaName] = useState(() => {
+    const saved = localStorage.getItem("onboard_ward") || "";
+    if (saved.includes("Ward ")) {
+      const parts = saved.split(", ");
+      if (parts.length > 1) {
+        return parts.slice(0, -1).join(", ");
+      }
+    }
+    return saved;
+  });
+
+  useEffect(() => {
+    const fullWard = areaName.trim() && wardNumber
+      ? `${areaName.trim()}, ${wardNumber}`
+      : wardNumber || areaName.trim();
+    setWard(fullWard);
+  }, [wardNumber, areaName]);
+
   useEffect(() => { localStorage.setItem("onboard_step", step.toString()); }, [step]);
   useEffect(() => { localStorage.setItem("onboard_lang", lang); }, [lang]);
   useEffect(() => { localStorage.setItem("onboard_role", role); }, [role]);
@@ -105,6 +131,10 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   const isPhoneValid = role === "citizen"
     ? phone.replace(/\D/g, "").length === 10
     : phone.includes("@") && phone.length > 3;
+
+  const isWardValid = role === "citizen"
+    ? name.trim().length >= 2 && wardNumber !== "" && areaName.trim().length >= 2
+    : ward !== "";
 
   // Step 0 — Language
   if (step === 0) return (
@@ -240,18 +270,28 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
         <div className="space-y-3">
           <div className="p-4 bg-secondary rounded-2xl border border-border">
             <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Your Full Name</p>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Priya Sharma"
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none" />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter your full name"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
           </div>
           <div className="p-4 bg-secondary rounded-2xl border border-border">
-            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Ward / Village / Area</p>
-            <input value={ward} onChange={e => setWard(e.target.value)} placeholder="e.g. KK Nagar, Ward 14"
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none" />
+            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Ward Number</p>
+            <select value={wardNumber} onChange={e => setWardNumber(e.target.value)}
+              className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-medium">
+              <option value="" disabled className="bg-card text-muted-foreground">Select Ward Number</option>
+              {Array.from({ length: 100 }, (_, i) => `Ward ${i + 1}`).map(w => (
+                <option key={w} value={w} className="bg-card text-foreground">{w}</option>
+              ))}
+            </select>
+          </div>
+          <div className="p-4 bg-secondary rounded-2xl border border-border">
+            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Street / Area Name</p>
+            <input value={areaName} onChange={e => setAreaName(e.target.value)} placeholder="e.g. KK Nagar"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
           </div>
           <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-100 rounded-2xl">
             <MapPin size={16} className="text-green-600 shrink-0" />
             <div className="flex-1">
-              <p className="text-xs text-muted-foreground">District (auto-detected)</p>
+              <p className="text-xs text-muted-foreground">District (auto-detected when location is enabled)</p>
               <p className="text-sm font-bold text-foreground">Madurai</p>
             </div>
             <CheckCircle size={15} className="text-green-500" />
@@ -273,7 +313,10 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
           </div>
         </div>
       )}
-      <button onClick={() => setStep(5)} className="w-full py-4 bg-primary text-white rounded-2xl font-bold mt-6" style={DF}>Continue</button>
+      <button disabled={!isWardValid} onClick={() => setStep(5)}
+        className={`w-full py-4 rounded-2xl font-bold mt-6 transition-all ${isWardValid ? "bg-primary text-white active-press" : "bg-secondary text-muted-foreground cursor-not-allowed"}`} style={DF}>
+        Continue
+      </button>
     </div>
   );
 
@@ -355,7 +398,7 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
       {/* Platform Info */}
       <div className="px-5 mb-4">
         <div className="flex items-center gap-2.5 p-3 bg-secondary border border-border rounded-xl">
-          <Cpu size={13} className="text-primary shrink-0" />
+          <Building2 size={13} className="text-primary shrink-0" />
           <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
             Submissions are automatically routed to the concerned administrative department for fast resolution.
           </p>
@@ -367,7 +410,7 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
         <h2 className="text-sm font-bold text-foreground mb-3" style={DF}>Citizen Guidelines</h2>
         <div className="space-y-3">
           {[
-            { icon: <Camera size={16} className="text-primary" />, title: "Photo Submission (Optional)", desc: "Include a clear photo to help verify details and speed up dispatch of field crews." },
+            { icon: <Camera size={16} className="text-primary" />, title: "Photo Verification", desc: "Include a clear photo to verify details, build trust, and help analyze the report efficiently." },
             { icon: <Mic size={16} className="text-primary" />, title: "Voice Description", desc: "Speak naturally in Hindi, English, or other Indian languages to detail the issue." },
             { icon: <CheckCircle size={16} className="text-primary" />, title: "Real-time Tracking", desc: "Track progress and receive official updates directly from your Member of Parliament." }
           ].map((item, i) => (
@@ -387,44 +430,61 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
   );
 }
 
-function CitizenComplaints({ onSelect }: { onSelect: (c: Complaint) => void }) {
+function CitizenComplaints({ onSelect, setTab }: { onSelect: (c: Complaint) => void; setTab: (t: CitizenTab) => void }) {
   const summaries = complaintService.getMyCitizenComplaints("ctz_001");
   return (
-    <div className="flex flex-col h-full overflow-y-auto scrollbar-none">
+    <div className="flex flex-col h-full overflow-y-auto scrollbar-none bg-background">
       <div className="pt-6 px-5 pb-4">
         <h1 className="text-[22px] font-bold text-foreground" style={DF}>My Complaints</h1>
         <p className="text-xs text-muted-foreground mt-0.5">{summaries.length} complaints submitted</p>
       </div>
-      <div className="px-5 space-y-3 pb-6">
-        {summaries.map(c => {
-          const full = complaintService.getById(c.id);
-          return (
-            <button key={c.id} onClick={() => full && onSelect(full)}
-              className="w-full bg-card rounded-2xl border border-border p-4 text-left active-press">
-              <div className="flex items-start gap-3">
-                <CategoryIcon category={c.category} size={19} showBg bgSize="w-12 h-12" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-foreground truncate" style={DF}>{c.title}</p>
-                  <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{c.shortId}</p>
+
+      {summaries.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center animate-fadeIn">
+          <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center text-muted-foreground mb-4">
+            <ClipboardList size={28} />
+          </div>
+          <h3 className="text-sm font-bold text-foreground mb-1" style={DF}>No Reports Submitted</h3>
+          <p className="text-xs text-muted-foreground max-w-[240px] leading-relaxed mb-6">
+            You haven't submitted any civic complaints yet. Your registered issues will be shown here.
+          </p>
+          <button onClick={() => setTab("report")}
+            className="px-5 py-3 bg-primary text-white text-xs font-bold rounded-xl active-press shadow-sm" style={DF}>
+            Report a Problem
+          </button>
+        </div>
+      ) : (
+        <div className="px-5 space-y-3 pb-6">
+          {summaries.map(c => {
+            const full = complaintService.getById(c.id);
+            return (
+              <button key={c.id} onClick={() => full && onSelect(full)}
+                className="w-full bg-card rounded-2xl border border-border p-4 text-left active-press">
+                <div className="flex items-start gap-3">
+                  <CategoryIcon category={c.category} size={19} showBg bgSize="w-12 h-12" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-foreground truncate" style={DF}>{c.title}</p>
+                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5">{c.shortId}</p>
+                  </div>
                 </div>
-                <StatusBadge status={c.status} size="sm" />
-              </div>
-              <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
-                <SeverityBadge severity={c.severity} size="sm" />
-                <span className="text-[11px] text-muted-foreground">
-                  {new Date(c.reportedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
-                </span>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+                  <SeverityBadge severity={c.severity} size="sm" />
+                  <span className="text-[11px] text-muted-foreground">
+                    {new Date(c.reportedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => void }) {
+function CitizenProfile({ onLogout, onBack, onSelect, setTab }: { onLogout: () => void; onBack: () => void; onSelect: (c: Complaint) => void; setTab: (t: CitizenTab) => void }) {
   const [photoUrl, setPhotoUrl] = useState<string>(() => localStorage.getItem("citizen_dp") || "");
+  const [activeListType, setActiveListType] = useState<null | "filed" | "joined">(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const userName = localStorage.getItem("onboard_name") || "Priya Sharma";
@@ -433,6 +493,20 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
   const rawPhone = localStorage.getItem("onboard_phone") || "9876543210";
   const formattedPhone = rawPhone.length === 10 ? `+91 ${rawPhone.slice(0, 5)} ${rawPhone.slice(5)}` : rawPhone;
   const initials = userName.trim().charAt(0).toUpperCase() || "P";
+
+  const allMyComplaints = complaintService.getMyCitizenComplaints("ctz_001");
+  const filedComplaints = allMyComplaints.filter(c => {
+    const full = complaintService.getById(c.id);
+    return full?.reportedBy === "ctz_001";
+  });
+  const joinedComplaints = allMyComplaints.filter(c => {
+    const full = complaintService.getById(c.id);
+    return full?.joinedCitizenIds.includes("ctz_001");
+  });
+  const resolvedCount = allMyComplaints.filter(c => {
+    const full = complaintService.getById(c.id);
+    return full?.status === "resolved";
+  }).length;
 
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -456,7 +530,7 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto px-5 pt-5 pb-6 scrollbar-none">
+    <div className="flex flex-col h-full overflow-y-auto px-5 pt-5 pb-6 scrollbar-none relative">
       <div className="flex items-center gap-3 mb-5">
         <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
           <ChevronLeft size={18} className="text-foreground" />
@@ -487,25 +561,76 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
             <p className="text-xs text-muted-foreground">{userLocation}</p>
           </div>
         </div>
-        <div className="p-4 bg-card rounded-2xl border border-border">
-          {[["Complaints Filed", "2"], ["Complaints Joined", "3"], ["Issues Resolved", "0"]].map(([k, v], i) => (
-            <div key={k} className={`flex items-center justify-between py-3 ${i > 0 ? "border-t border-border" : ""}`}>
-              <span className="text-sm text-foreground">{k}</span>
-              <span className="text-sm font-bold text-foreground">{v}</span>
-            </div>
-          ))}
-        </div>
-        <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-          <div className="flex items-center gap-2 mb-1">
-            <Cpu size={13} className="text-blue-600" />
-            <span className="text-xs font-bold text-blue-700">AI Features Active</span>
+
+        <div className="p-4 bg-card rounded-2xl border border-border space-y-1">
+          <button onClick={() => setActiveListType("filed")} className="w-full flex items-center justify-between py-3 hover:bg-secondary/50 rounded-xl px-1.5 transition-colors">
+            <span className="text-sm font-semibold text-foreground">Complaints Filed</span>
+            <span className="text-sm font-bold text-foreground bg-secondary px-2.5 py-0.5 rounded-full">{filedComplaints.length}</span>
+          </button>
+          <div className="border-t border-border" />
+          <button onClick={() => setActiveListType("joined")} className="w-full flex items-center justify-between py-3 hover:bg-secondary/50 rounded-xl px-1.5 transition-colors">
+            <span className="text-sm font-semibold text-foreground">Complaints Joined</span>
+            <span className="text-sm font-bold text-foreground bg-secondary px-2.5 py-0.5 rounded-full">{joinedComplaints.length}</span>
+          </button>
+          <div className="border-t border-border" />
+          <div className="w-full flex items-center justify-between py-3 px-1.5">
+            <span className="text-sm font-semibold text-foreground">Issues Resolved</span>
+            <span className="text-sm font-bold text-foreground bg-secondary px-2.5 py-0.5 rounded-full">{resolvedCount}</span>
           </div>
-          <p className="text-[11px] text-blue-600">Auto-classification · Duplicate detection · Smart routing · Impact scoring</p>
         </div>
+
         <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm border border-red-100">
           Logout
         </button>
       </div>
+
+      {/* Drawer Overlay for Filed/Joined complaints */}
+      {activeListType && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end animate-fadeIn">
+          <div className="bg-card w-full max-h-[80%] rounded-t-[32px] flex flex-col animate-slideUp">
+            {/* Header */}
+            <div className="pt-6 px-6 pb-4 border-b border-border flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground" style={DF}>
+                {activeListType === "filed" ? "My Filed Complaints" : "My Joined Complaints"}
+              </h2>
+              <button onClick={() => setActiveListType(null)} className="text-xs px-3 py-1.5 bg-secondary text-foreground rounded-full font-bold">
+                Close
+              </button>
+            </div>
+            
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-3 scrollbar-none">
+              {(activeListType === "filed" ? filedComplaints : joinedComplaints).length === 0 ? (
+                <div className="py-8 text-center text-xs text-muted-foreground font-medium">
+                  No complaints found here.
+                </div>
+              ) : (
+                (activeListType === "filed" ? filedComplaints : joinedComplaints).map(c => {
+                  const full = complaintService.getById(c.id);
+                  return (
+                    <button key={c.id} onClick={() => { if (full) { onSelect(full); setTab("detail"); setActiveListType(null); } }}
+                      className="w-full bg-secondary hover:bg-secondary/80 rounded-2xl border border-border p-4 text-left active-press transition-colors">
+                      <div className="flex items-start gap-3">
+                        <CategoryIcon category={c.category} size={15} showBg bgSize="w-9 h-9" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate" style={DF}>{c.title}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{c.shortId}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between">
+                        <SeverityBadge severity={c.severity} size="sm" />
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(c.reportedAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -773,13 +898,33 @@ function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => v
 // ════════════════════════════════════════════════════════════════════
 // ROOT APP
 // ════════════════════════════════════════════════════════════════════
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const secs = Math.floor(diff / 1000);
+  if (secs < 10) return "Just now";
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 export default function App() {
   const [tick, setTick] = useState(0);
+  const [timeTick, setTimeTick] = useState(0);
 
   useEffect(() => {
     const handleUpdate = () => setTick(t => t + 1);
     window.addEventListener("complaints_updated", handleUpdate);
     return () => window.removeEventListener("complaints_updated", handleUpdate);
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeTick(t => t + 1);
+    }, 15000); // refresh relative times every 15 seconds
+    return () => clearInterval(timer);
   }, []);
 
   const [phase, setPhase] = useState<Phase>("onboard");
@@ -791,8 +936,8 @@ export default function App() {
   const [mapCategoryFilter, setMapCategoryFilter] = useState<ComplaintCategory | "all">("all");
 
   const [notifications, setNotifications] = useState<any[]>([
-    { id: "1", title: "Welcome to JanVaani!", desc: "Submit civic complaints directly to your local representative.", time: "Just now", unread: true },
-    { id: "2", title: "Constituency Notice", desc: "Drainage cleaning scheduled for Ward 14 this Friday.", time: "2h ago", unread: true },
+    { id: "1", title: "Welcome to JanVaani!", desc: "Submit civic grievances directly to your local representative.", timestamp: Date.now() - 120000, unread: true },
+    { id: "2", title: "Constituency Notice", desc: "Drainage cleaning scheduled for Ward 14 this Friday.", timestamp: Date.now() - 7200000, unread: true },
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -810,6 +955,7 @@ export default function App() {
   const citizenNav = [
     { id: "home" as CitizenTab,       icon: <Home size={21} />,          label: "Home" },
     { id: "report" as CitizenTab,     icon: <Plus size={22} />,          label: "Report" },
+    { id: "complaints" as CitizenTab, icon: <ClipboardList size={21} />, label: "My Reports" },
     { id: "profile" as CitizenTab,    icon: <User size={21} />,          label: "Profile" },
   ];
 
@@ -895,7 +1041,7 @@ export default function App() {
                           id: String(Date.now()),
                           title: "Complaint Registered",
                           desc: `Your ${category} complaint (${shortId}) has been successfully submitted.`,
-                          time: "Just now",
+                          timestamp: Date.now(),
                           unread: true,
                         },
                         ...prev,
@@ -903,7 +1049,23 @@ export default function App() {
                     }}
                   />
                 )}
-                {citizenTab === "profile" && <CitizenProfile onLogout={handleLogout} onBack={() => setCitizenTab("home")} />}
+                {citizenTab === "complaints" && (
+                  <CitizenComplaints onSelect={handleComplaintSelect} setTab={setCitizenTab} />
+                )}
+                {citizenTab === "detail" && selectedComplaint && (
+                  <ComplaintDetailCitizen
+                    complaint={selectedComplaint}
+                    onBack={() => setCitizenTab("complaints")}
+                  />
+                )}
+                {citizenTab === "profile" && (
+                  <CitizenProfile
+                    onLogout={handleLogout}
+                    onBack={() => setCitizenTab("home")}
+                    onSelect={handleComplaintSelect}
+                    setTab={setCitizenTab}
+                  />
+                )}
               </>
             )}
 
@@ -967,7 +1129,9 @@ export default function App() {
                     <div key={n.id} className={`p-4 rounded-2xl border transition-all ${n.unread ? "bg-primary/5 border-primary/20" : "bg-card border-border"}`}>
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-xs font-bold text-foreground">{n.title}</p>
-                        <span className="text-[9px] text-muted-foreground font-semibold shrink-0">{n.time}</span>
+                        <span className="text-[9px] text-muted-foreground font-semibold shrink-0">
+                          {formatRelativeTime(n.timestamp)}
+                        </span>
                       </div>
                       <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">{n.desc}</p>
                     </div>
