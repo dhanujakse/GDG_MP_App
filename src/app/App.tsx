@@ -5,7 +5,7 @@
 // All business logic lives in services/. All screen logic lives in screens/.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   MapPin, Mic, Home, Plus, ClipboardList, User,
   CheckCircle, ChevronRight, Users, Bell, Phone,
@@ -77,6 +77,7 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   const [phone, setPhone] = useState(() => localStorage.getItem("onboard_phone") || "");
   const [otp, setOtp] = useState(() => localStorage.getItem("onboard_otp") || "");
   const [ward, setWard] = useState(() => localStorage.getItem("onboard_ward") || "");
+  const [name, setName] = useState(() => localStorage.getItem("onboard_name") || "");
 
   useEffect(() => { localStorage.setItem("onboard_step", step.toString()); }, [step]);
   useEffect(() => { localStorage.setItem("onboard_lang", lang); }, [lang]);
@@ -84,6 +85,7 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   useEffect(() => { localStorage.setItem("onboard_phone", phone); }, [phone]);
   useEffect(() => { localStorage.setItem("onboard_otp", otp); }, [otp]);
   useEffect(() => { localStorage.setItem("onboard_ward", ward); }, [ward]);
+  useEffect(() => { localStorage.setItem("onboard_name", name); }, [name]);
 
   const langs = [
     { code: "hi", native: "हिंदी", en: "Hindi", bg: "bg-orange-50 border-orange-200" },
@@ -108,8 +110,8 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   if (step === 0) return (
     <div className="flex flex-col h-full overflow-y-auto px-5 pt-8 pb-6 animate-fadeIn scrollbar-none">
       <div className="mb-6">
-        <div className="mb-4">
-          <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain" />
+        <div className="mb-4 w-16 h-16 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-2.5">
+          <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-1" style={DF}>Choose Language</h1>
         <p className="text-sm text-muted-foreground">Select your preferred language · अपनी भाषा चुनें</p>
@@ -237,6 +239,11 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
       {role === "citizen" ? (
         <div className="space-y-3">
           <div className="p-4 bg-secondary rounded-2xl border border-border">
+            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Your Full Name</p>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Priya Sharma"
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none" />
+          </div>
+          <div className="p-4 bg-secondary rounded-2xl border border-border">
             <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Ward / Village / Area</p>
             <input value={ward} onChange={e => setWard(e.target.value)} placeholder="e.g. KK Nagar, Ward 14"
               className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none" />
@@ -277,8 +284,8 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
         <CheckCircle size={48} className="text-green-500" />
       </div>
       <div>
-        <div className="flex items-center justify-center gap-2 mb-3">
-          <div className="w-10 h-10 flex items-center justify-center">
+        <div className="flex items-center justify-center gap-2.5 mb-3">
+          <div className="w-8 h-8 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-1 shrink-0">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <span className="text-xs font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
@@ -303,13 +310,22 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
 // CITIZEN SCREENS
 // ════════════════════════════════════════════════════════════════════
 function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: CitizenTab) => void; onBellClick: () => void; unreadCount: number }) {
+  const userName = localStorage.getItem("onboard_name") || "Priya Sharma";
+  const userWard = localStorage.getItem("onboard_ward") || "KK Nagar, Ward 14";
+  const userLocation = userWard.toLowerCase().includes("madurai") ? userWard : `${userWard}, Madurai`;
+
   return (
     <div className="flex flex-col h-full overflow-y-auto scrollbar-none">
       <div className="pt-6 pb-4 px-5">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground tracking-wide uppercase">Good morning</p>
-            <h1 className="text-[22px] font-bold text-foreground leading-tight" style={DF}>Priya Sharma</h1>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-1.5 shrink-0">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wider leading-none">JanVaani</p>
+              <h1 className="text-sm font-bold text-foreground mt-1 leading-none" style={DF}>{userName}</h1>
+            </div>
           </div>
           <button onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
             <Bell size={19} className="text-foreground" />
@@ -318,9 +334,9 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
             )}
           </button>
         </div>
-        <div className="flex items-center gap-1.5 mt-3 px-3 py-2 bg-secondary rounded-xl">
+        <div className="flex items-center gap-1.5 mt-4 px-3 py-2 bg-secondary rounded-xl">
           <MapPin size={13} className="text-primary shrink-0" />
-          <span className="text-xs font-semibold text-foreground">KK Nagar, Ward 14, Madurai</span>
+          <span className="text-xs font-semibold text-foreground">{userLocation}</span>
         </div>
       </div>
 
@@ -336,12 +352,12 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
         </button>
       </div>
 
-      {/* AI Badge */}
+      {/* Platform Info */}
       <div className="px-5 mb-4">
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl">
-          <Cpu size={13} className="text-blue-600 shrink-0" />
-          <p className="text-[11px] text-blue-700 font-medium leading-relaxed">
-            AI automatically classifies, prioritises, and routes your complaint to the right department
+        <div className="flex items-center gap-2.5 p-3 bg-secondary border border-border rounded-xl">
+          <Cpu size={13} className="text-primary shrink-0" />
+          <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
+            Submissions are automatically routed to the concerned administrative department for fast resolution.
           </p>
         </div>
       </div>
@@ -351,12 +367,14 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
         <h2 className="text-sm font-bold text-foreground mb-3" style={DF}>Citizen Guidelines</h2>
         <div className="space-y-3">
           {[
-            { emoji: "📸", title: "Upload or Capture Photos", desc: "Take a clear picture of the water leak, road damage, or uncollected garbage." },
-            { emoji: "🤖", title: "OpenCV & AI Validation", desc: "Our system runs OpenCV edge checks and Gemini API validation to ensure relevance." },
-            { emoji: "🗣️", title: "Voice Description Enabled", desc: "Describe the issue using voice in Hindi, English, or other Indian languages." }
+            { icon: <Camera size={16} className="text-primary" />, title: "Photo Submission (Optional)", desc: "Include a clear photo to help verify details and speed up dispatch of field crews." },
+            { icon: <Mic size={16} className="text-primary" />, title: "Voice Description", desc: "Speak naturally in Hindi, English, or other Indian languages to detail the issue." },
+            { icon: <CheckCircle size={16} className="text-primary" />, title: "Real-time Tracking", desc: "Track progress and receive official updates directly from your Member of Parliament." }
           ].map((item, i) => (
-            <div key={i} className="flex gap-3 p-3.5 bg-card rounded-2xl border border-border">
-              <span className="text-2xl leading-none">{item.emoji}</span>
+            <div key={i} className="flex gap-3.5 p-3.5 bg-card rounded-2xl border border-border">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                {item.icon}
+              </div>
               <div>
                 <p className="text-xs font-bold text-foreground">{item.title}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">{item.desc}</p>
@@ -409,6 +427,13 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
   const [photoUrl, setPhotoUrl] = useState<string>(() => localStorage.getItem("citizen_dp") || "");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const userName = localStorage.getItem("onboard_name") || "Priya Sharma";
+  const userWard = localStorage.getItem("onboard_ward") || "KK Nagar, Ward 14";
+  const userLocation = userWard.toLowerCase().includes("madurai") ? userWard : `${userWard}, Madurai`;
+  const rawPhone = localStorage.getItem("onboard_phone") || "9876543210";
+  const formattedPhone = rawPhone.length === 10 ? `+91 ${rawPhone.slice(0, 5)} ${rawPhone.slice(5)}` : rawPhone;
+  const initials = userName.trim().charAt(0).toUpperCase() || "P";
+
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -446,7 +471,7 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
             {photoUrl ? (
               <img src={photoUrl} alt="DP" className="w-16 h-16 rounded-full object-cover border-2 border-primary" />
             ) : (
-              <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold" style={DF}>P</div>
+              <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-white text-2xl font-bold" style={DF}>{initials}</div>
             )}
             <button
               onClick={() => fileRef.current?.click()}
@@ -455,11 +480,11 @@ function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: ()
             </button>
           </div>
           <div>
-            <p className="text-base font-bold text-foreground" style={DF}>Priya Sharma</p>
+            <p className="text-base font-bold text-foreground" style={DF}>{userName}</p>
             <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
-              <Phone size={12} /> +91 98765 43210
+              <Phone size={12} /> {formattedPhone}
             </p>
-            <p className="text-xs text-muted-foreground">KK Nagar, Ward 14, Madurai</p>
+            <p className="text-xs text-muted-foreground">{userLocation}</p>
           </div>
         </div>
         <div className="p-4 bg-card rounded-2xl border border-border">
@@ -519,8 +544,10 @@ function MPDashboard({
               <ChevronLeft size={18} className="text-foreground" />
             </button>
             <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain" />
+              <div className="flex items-center gap-1.5 mb-0.5">
+                <div className="w-5 h-5 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-0.5 shrink-0">
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                </div>
                 <span className="text-[9px] font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
               </div>
               <h1 className="text-lg font-bold text-foreground leading-none mt-0.5" style={DF}>Dr. Rajesh Kumar</h1>
@@ -1007,7 +1034,7 @@ export default function App() {
       </div>
 
       <p className="mt-6 text-xs text-slate-400 font-medium text-center">
-        {import.meta.env.VITE_APP_NAME || "JanVaani"} · Government-Grade Civic Platform · AI-Powered
+        {import.meta.env.VITE_APP_NAME || "JanVaani"} · National Civic Engagement & Grievance Redressal Platform
       </p>
     </div>
   );

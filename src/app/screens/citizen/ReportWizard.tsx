@@ -597,12 +597,12 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
             <div className="grid grid-cols-3 gap-2.5 mb-4">
               {CATEGORIES.map((c) => (
                 <button key={c.key} onClick={() => setCategory(c.key)}
-                  className={`flex flex-col items-center gap-2 p-3.5 rounded-2xl border-2 transition-all active-press ${
+                  className={`flex flex-col items-center gap-2.5 p-3.5 rounded-2xl border-2 transition-all active-press ${
                     category === c.key
                       ? "border-primary bg-primary/5"
                       : "border-border bg-card"
                   }`}>
-                  <span className="text-3xl leading-none">{c.emoji}</span>
+                  <CategoryIcon category={c.key} size={22} showBg bgSize="w-11 h-11" />
                   <span className="text-[11px] font-bold text-foreground leading-tight text-center">{c.label}</span>
                 </button>
               ))}
@@ -642,28 +642,14 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
               <div className="space-y-3">
                 <div className="relative rounded-2xl overflow-hidden border border-border bg-slate-100">
                   <img src={photoPreview} alt="Original complaint" className="w-full h-44 object-cover" />
-                  
-                  {/* OpenCV Edge map preview thumbnail if validating/validated */}
-                  {opencvEdgePreview && (
-                    <div className="absolute bottom-2 right-2 w-24 h-18 border border-white/40 rounded-lg overflow-hidden bg-black shadow-lg">
-                      <img src={opencvEdgePreview} alt="OpenCV edge map" className="w-full h-full object-cover grayscale brightness-125" />
-                      <div className="absolute top-0 inset-x-0 bg-black/60 text-[7px] text-white text-center py-0.5 font-bold uppercase tracking-wider">OpenCV Edges</div>
-                    </div>
-                  )}
                 </div>
-
-                {opencvStats && (
-                  <p className="text-[10px] text-primary/80 font-mono font-bold text-center bg-primary/5 py-1 rounded-lg">
-                    ⚙️ OpenCV Check: {opencvStats}
-                  </p>
-                )}
 
                 {/* Validation Results overlay */}
                 {isValidatingImage && (
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex flex-col items-center justify-center gap-2">
+                  <div className="p-4 bg-secondary border border-border rounded-2xl flex flex-col items-center justify-center gap-2">
                     <Loader2 size={20} className="text-primary animate-spin" />
-                    <p className="text-xs font-bold text-blue-700">Validating image with Gemini AI...</p>
-                    <p className="text-[9px] text-blue-500">Checking category relevance to: {category}</p>
+                    <p className="text-xs font-bold text-foreground">Verifying photo...</p>
+                    <p className="text-[10px] text-muted-foreground">Checking image clarity and category match</p>
                   </div>
                 )}
 
@@ -671,7 +657,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
                   <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-left flex gap-2">
                     <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-xs font-bold text-red-800">Image Validation Failed</p>
+                      <p className="text-xs font-bold text-red-800">Photo Verification Unsuccessful</p>
                       <p className="text-[10px] text-red-600 mt-0.5 leading-relaxed">{imageValidationError}</p>
                     </div>
                   </div>
@@ -681,8 +667,8 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
                   <div className="p-3.5 bg-green-50 border border-green-200 rounded-2xl text-left flex gap-2 items-center">
                     <CheckCircle size={16} className="text-green-500 shrink-0" />
                     <div>
-                      <p className="text-xs font-bold text-green-800">Validation Passed</p>
-                      <p className="text-[10px] text-green-600 mt-0.5">Category matches! Advancing to description...</p>
+                      <p className="text-xs font-bold text-green-800">Photo Verified Successfully</p>
+                      <p className="text-[10px] text-green-600 mt-0.5">Image verified. Advancing to description...</p>
                     </div>
                   </div>
                 )}
@@ -701,23 +687,29 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3 mb-2 mt-1">
-                <button onClick={startLiveCamera}
-                  className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Camera size={20} className="text-primary" />
-                  </div>
-                  <p className="text-xs font-bold text-foreground">Live Camera</p>
-                  <p className="text-[9px] text-muted-foreground">Capture matching photo</p>
-                </button>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 mt-1">
+                  <button onClick={startLiveCamera}
+                    className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Camera size={20} className="text-primary" />
+                    </div>
+                    <p className="text-xs font-bold text-foreground">Live Camera</p>
+                    <p className="text-[9px] text-muted-foreground">Capture matching photo</p>
+                  </button>
 
-                <button onClick={() => fileInputRef.current?.click()}
-                  className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Upload size={20} className="text-primary" />
-                  </div>
-                  <p className="text-xs font-bold text-foreground">Local Folder</p>
-                  <p className="text-[9px] text-muted-foreground">Upload from storage</p>
+                  <button onClick={() => fileInputRef.current?.click()}
+                    className="py-8 bg-card border-2 border-dashed border-primary/20 rounded-2xl flex flex-col items-center justify-center gap-2 active-press transition-all hover:bg-primary/5">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Upload size={20} className="text-primary" />
+                    </div>
+                    <p className="text-xs font-bold text-foreground">Local Folder</p>
+                    <p className="text-[9px] text-muted-foreground">Upload from storage</p>
+                  </button>
+                </div>
+                <button onClick={() => { setPhotoFile(null); setPhotoPreview(null); setStep(2); }}
+                  className="w-full py-3.5 bg-secondary hover:bg-slate-200/60 text-foreground font-bold rounded-2xl text-xs transition-all active-press" style={DF}>
+                  Continue Without Photo
                 </button>
               </div>
             )}
