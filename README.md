@@ -35,6 +35,21 @@ The platform is built around three core principles:
 |  **AI-assisted governance** | Automated summaries, severity scoring, and department routing |
 |  **Faster issue resolution** | Duplicate detection and impact scoring cut through the noise |
 
+AI Image Validation in Action
+
+Every photo submitted by a citizen is automatically screened by the AI pipeline before it reaches a government official — filtering out irrelevant, blurry, or spam uploads.
+
+<table>
+  <tr>
+    <th align="center">✅ Validation Passed</th>
+    <th align="center">❌ Validation Failed</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/confirmed.png" alt="AI image validation passed" width="400"/></td>
+    <td align="center"><img src="assets/error.png" alt="AI image validation failed" width="400"/></td>
+  </tr>
+</table>
+
 ---
 
 ## Features
