@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { complaintService } from "@/services/complaint.service";
+import { uploadCitizenDP } from "@/services/firebase";
 import { ReportWizard } from "@/app/screens/citizen/ReportWizard";
 import { ComplaintDetailCitizen } from "@/app/screens/citizen/ComplaintDetailCitizen";
 import { MPComplaintDetail } from "@/app/screens/mp/MPComplaintDetail";
@@ -404,26 +405,39 @@ function CitizenComplaints({ onSelect }: { onSelect: (c: Complaint) => void }) {
   );
 }
 
-function CitizenProfile({ onLogout }: { onLogout: () => void }) {
+function CitizenProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string>(() => localStorage.getItem("citizen_dp") || "");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPhotoUrl(url);
-    // Persist as data-url so it survives refresh
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (reader.result) localStorage.setItem("citizen_dp", reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoUrl(previewUrl);
+
+    try {
+      const realUrl = await uploadCitizenDP(file);
+      setPhotoUrl(realUrl);
+      localStorage.setItem("citizen_dp", realUrl);
+    } catch (err) {
+      console.error("Error uploading citizen profile DP:", err);
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) localStorage.setItem("citizen_dp", reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto px-5 pt-6 pb-6 scrollbar-none">
-      <h1 className="text-[22px] font-bold text-foreground mb-5" style={DF}>Profile</h1>
+    <div className="flex flex-col h-full overflow-y-auto px-5 pt-5 pb-6 scrollbar-none">
+      <div className="flex items-center gap-3 mb-5">
+        <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
+          <ChevronLeft size={18} className="text-foreground" />
+        </button>
+        <h1 className="text-lg font-bold text-foreground leading-none" style={DF}>Profile</h1>
+      </div>
       <div className="space-y-4">
         {/* Profile card with photo upload */}
         <div className="flex items-center gap-4 p-5 bg-card rounded-2xl border border-border">
@@ -475,7 +489,23 @@ function CitizenProfile({ onLogout }: { onLogout: () => void }) {
 // MP SCREENS
 // ════════════════════════════════════════════════════════════════════
 
-function MPDashboard({ onComplaintSelect, onBellClick, unreadCount }: { onComplaintSelect: (c: Complaint) => void; onBellClick: () => void; unreadCount: number }) {
+function MPDashboard({
+  onComplaintSelect,
+  onBellClick,
+  unreadCount,
+  setTab,
+  setPrioritySeverity,
+  setMapCategoryFilter,
+  onBack,
+}: {
+  onComplaintSelect: (c: Complaint) => void;
+  onBellClick: () => void;
+  unreadCount: number;
+  setTab: (tab: MPTab) => void;
+  setPrioritySeverity: (s: "all" | "critical") => void;
+  setMapCategoryFilter: (c: ComplaintCategory | "all") => void;
+  onBack: () => void;
+}) {
   const stats = complaintService.getDashboardStats();
   const priorityList = complaintService.getPriorityList().slice(0, 5);
   const [filter, setFilter] = useState<"today" | "week" | "month">("week");
@@ -484,13 +514,18 @@ function MPDashboard({ onComplaintSelect, onBellClick, unreadCount }: { onCompla
     <div className="flex flex-col h-full overflow-y-auto scrollbar-none">
       <div className="pt-6 pb-4 px-5">
         <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-0.5">
-              <img src="/logo.png" alt="Logo" className="w-6 h-6 object-contain" />
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
+              <ChevronLeft size={18} className="text-foreground" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <img src="/logo.png" alt="Logo" className="w-4 h-4 object-contain" />
+                <span className="text-[9px] font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
+              </div>
+              <h1 className="text-lg font-bold text-foreground leading-none mt-0.5" style={DF}>Dr. Rajesh Kumar</h1>
+              <p className="text-[10px] text-muted-foreground mt-0.5">MP · Madurai Central</p>
             </div>
-            <h1 className="text-[20px] font-bold text-foreground leading-tight" style={DF}>Dr. Rajesh Kumar</h1>
-            <p className="text-xs text-muted-foreground">MP · Madurai Central</p>
           </div>
           <button onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
             <Bell size={19} className="text-foreground" />
@@ -505,27 +540,30 @@ function MPDashboard({ onComplaintSelect, onBellClick, unreadCount }: { onCompla
         {/* Stats */}
         <div className="grid grid-cols-2 gap-2.5">
           {[
-            { label: "Total", value: stats.total, color: "text-foreground", bg: "bg-card border-border" },
-            { label: "Critical", value: stats.critical, color: "text-red-600", bg: "bg-red-50 border-red-100" },
-            { label: "Resolved", value: stats.resolved, color: "text-green-600", bg: "bg-green-50 border-green-100" },
-            { label: "Pending", value: stats.pending, color: "text-amber-600", bg: "bg-amber-50 border-amber-100" },
+            { label: "Total", value: stats.total, color: "text-foreground", bg: "bg-card border-border hover:bg-secondary/40", onClick: () => { setPrioritySeverity("all"); setTab("priority"); } },
+            { label: "Critical", value: stats.critical, color: "text-red-600", bg: "bg-red-50 border-red-100 hover:bg-red-100/30", onClick: () => { setPrioritySeverity("critical"); setTab("priority"); } },
           ].map(s => (
-            <div key={s.label} className={`${s.bg} border rounded-2xl p-4`}>
+            <button key={s.label} onClick={s.onClick} className={`${s.bg} border rounded-2xl p-4 text-left transition-all active-press`}>
               <p className={`text-2xl font-bold ${s.color}`} style={DF}>{s.value}</p>
               <p className="text-xs text-muted-foreground mt-0.5 font-medium">{s.label}</p>
-            </div>
+            </button>
           ))}
         </div>
 
         {/* Alert spike */}
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl">
+        <button
+          onClick={() => {
+            setMapCategoryFilter("water");
+            setTab("map");
+          }}
+          className="w-full text-left p-3.5 bg-red-50 border border-red-200 rounded-2xl hover:bg-red-100/50 transition-all active-press">
           <div className="flex items-center gap-2 mb-1">
-            <Flame size={15} className="text-red-500" />
+            <Flame size={15} className="text-red-500 animate-pulse" />
             <span className="text-xs font-bold text-red-700 uppercase tracking-wide">AI Alert — Rising Fast</span>
           </div>
           <p className="text-sm font-bold text-red-800" style={DF}>Water complaints ↑ 340% in 48 hours</p>
-          <p className="text-xs text-red-600 mt-0.5">KK Nagar, Ward 12–14 · Likely infrastructure failure</p>
-        </div>
+          <p className="text-xs text-red-600 mt-0.5">KK Nagar, Ward 12–14 · Click to view on map</p>
+        </button>
 
         {/* Priority list */}
         <div>
@@ -584,23 +622,50 @@ function MPDashboard({ onComplaintSelect, onBellClick, unreadCount }: { onCompla
   );
 }
 
-function MPPriority({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) => void }) {
+function MPPriority({
+  onComplaintSelect,
+  severityFilter,
+  setSeverityFilter,
+  onBack,
+}: {
+  onComplaintSelect: (c: Complaint) => void;
+  severityFilter: "all" | "critical";
+  setSeverityFilter: (s: "all" | "critical") => void;
+  onBack: () => void;
+}) {
   const [sortBy, setSortBy] = useState<"score" | "citizens" | "date">("score");
-  const allComplaints = complaintService.getPriorityList();
+  let allComplaints = complaintService.getPriorityList();
+
+  if (severityFilter === "critical") {
+    allComplaints = allComplaints.filter((c) => c.severity === "critical");
+  }
 
   return (
     <div className="flex flex-col h-full">
       <div className="shrink-0 pt-5 pb-3 px-5 border-b border-border">
-        <h1 className="text-lg font-bold text-foreground mb-3" style={DF}>Priority Issues</h1>
-        <div className="flex gap-2">
-          {(["score", "citizens", "date"] as const).map(s => (
-            <button key={s} onClick={() => setSortBy(s)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
-                sortBy === s ? "bg-primary text-white" : "bg-secondary text-muted-foreground"
-              }`}>
-              {s === "score" ? "Impact" : s === "citizens" ? "Citizens" : "Recent"}
+        <div className="flex items-center gap-3 mb-3">
+          <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
+            <ChevronLeft size={18} className="text-foreground" />
+          </button>
+          <h1 className="text-lg font-bold text-foreground leading-none" style={DF}>Priority Issues</h1>
+        </div>
+        <div className="flex gap-2 items-center justify-between">
+          <div className="flex gap-1.5">
+            {(["score", "citizens", "date"] as const).map(s => (
+              <button key={s} onClick={() => setSortBy(s)}
+                className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
+                  sortBy === s ? "bg-primary text-white" : "bg-secondary text-muted-foreground"
+                }`}>
+                {s === "score" ? "Impact" : s === "citizens" ? "Citizens" : "Recent"}
+              </button>
+            ))}
+          </div>
+          {severityFilter === "critical" && (
+            <button onClick={() => setSeverityFilter("all")}
+              className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full flex items-center gap-1 active-press">
+              🔴 Critical Only (Clear)
             </button>
-          ))}
+          )}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto scrollbar-none px-4 py-3 space-y-3">
@@ -625,7 +690,6 @@ function MPPriority({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) =
               </div>
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
                 <SeverityBadge severity={c.severity} size="sm" />
-                <StatusBadge status={c.status} size="sm" />
                 <span className="ml-auto text-[10px] text-muted-foreground">{c.assignedDepartment?.replace(/_/g, " ") ?? "Unassigned"}</span>
               </div>
             </button>
@@ -636,10 +700,15 @@ function MPPriority({ onComplaintSelect }: { onComplaintSelect: (c: Complaint) =
   );
 }
 
-function MPProfile({ onLogout }: { onLogout: () => void }) {
+function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => void }) {
   return (
-    <div className="flex flex-col h-full overflow-y-auto px-5 pt-6 pb-6 scrollbar-none">
-      <h1 className="text-[22px] font-bold text-foreground mb-5" style={DF}>MP Profile</h1>
+    <div className="flex flex-col h-full overflow-y-auto px-5 pt-5 pb-6 scrollbar-none">
+      <div className="flex items-center gap-3 mb-5">
+        <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
+          <ChevronLeft size={18} className="text-foreground" />
+        </button>
+        <h1 className="text-lg font-bold text-foreground leading-none" style={DF}>MP Profile</h1>
+      </div>
       <div className="space-y-4">
         <div className="flex items-center gap-4 p-5 bg-card rounded-2xl border border-border">
           <div className="w-14 h-14 rounded-full bg-primary flex items-center justify-center text-white text-xl font-bold" style={DF}>R</div>
@@ -678,10 +747,21 @@ function MPProfile({ onLogout }: { onLogout: () => void }) {
 // ROOT APP
 // ════════════════════════════════════════════════════════════════════
 export default function App() {
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const handleUpdate = () => setTick(t => t + 1);
+    window.addEventListener("complaints_updated", handleUpdate);
+    return () => window.removeEventListener("complaints_updated", handleUpdate);
+  }, []);
+
   const [phase, setPhase] = useState<Phase>("onboard");
   const [citizenTab, setCitizenTab] = useState<CitizenTab>("home");
   const [mpTab, setMpTab] = useState<MPTab>("dashboard");
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+
+  const [prioritySeverity, setPrioritySeverity] = useState<"all" | "critical">("all");
+  const [mapCategoryFilter, setMapCategoryFilter] = useState<ComplaintCategory | "all">("all");
 
   const [notifications, setNotifications] = useState<any[]>([
     { id: "1", title: "Welcome to JanVaani!", desc: "Submit civic complaints directly to your local representative.", time: "Just now", unread: true },
@@ -777,6 +857,7 @@ export default function App() {
                     setTab={setCitizenTab}
                     onBellClick={() => setShowNotifications(true)}
                     unreadCount={notifications.filter(n => n.unread).length}
+                    onBack={() => setPhase("onboard")}
                   />
                 )}
                 {citizenTab === "report" && (
@@ -796,7 +877,7 @@ export default function App() {
                     }}
                   />
                 )}
-                {citizenTab === "profile" && <CitizenProfile onLogout={handleLogout} />}
+                {citizenTab === "profile" && <CitizenProfile onLogout={handleLogout} onBack={() => setCitizenTab("home")} />}
               </>
             )}
 
@@ -807,11 +888,28 @@ export default function App() {
                     onComplaintSelect={handleComplaintSelect}
                     onBellClick={() => setShowNotifications(true)}
                     unreadCount={notifications.filter(n => n.unread).length}
+                    setTab={setMpTab}
+                    setPrioritySeverity={setPrioritySeverity}
+                    setMapCategoryFilter={setMapCategoryFilter}
+                    onBack={() => setPhase("onboard")}
                   />
                 )}
-                {mpTab === "priority" && <MPPriority onComplaintSelect={handleComplaintSelect} />}
-                {mpTab === "map" && <MPMapScreen onComplaintSelect={handleMapComplaintSelect} />}
-                {mpTab === "profile" && <MPProfile onLogout={handleLogout} />}
+                {mpTab === "priority" && (
+                  <MPPriority
+                    onComplaintSelect={handleComplaintSelect}
+                    severityFilter={prioritySeverity}
+                    setSeverityFilter={setPrioritySeverity}
+                    onBack={() => setMpTab("dashboard")}
+                  />
+                )}
+                {mpTab === "map" && (
+                  <MPMapScreen
+                    onComplaintSelect={handleMapComplaintSelect}
+                    initialCategoryFilter={mapCategoryFilter}
+                    onBack={() => setMpTab("dashboard")}
+                  />
+                )}
+                {mpTab === "profile" && <MPProfile onLogout={handleLogout} onBack={() => setMpTab("dashboard")} />}
                 {mpTab === "detail" && selectedComplaint && (
                   <MPComplaintDetail
                     complaint={selectedComplaint}
@@ -889,7 +987,11 @@ export default function App() {
               ) : (
                 <div className="flex">
                   {mpNav.map(item => (
-                    <button key={item.id} onClick={() => setMpTab(item.id)}
+                    <button key={item.id} onClick={() => {
+                      if (item.id === "map") setMapCategoryFilter("all");
+                      if (item.id === "priority") setPrioritySeverity("all");
+                      setMpTab(item.id);
+                    }}
                       className={`flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors ${mpTab === item.id ? "text-primary" : "text-muted-foreground"}`}>
                       {item.icon}
                       <span className={`text-[10px] font-semibold ${mpTab === item.id ? "text-primary" : "text-muted-foreground"}`}>

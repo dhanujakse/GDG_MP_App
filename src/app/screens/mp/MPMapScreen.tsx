@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useMemo } from "react";
-import { Filter, List, Map as MapIcon } from "lucide-react";
+import { Filter, List, Map as MapIcon, ChevronLeft } from "lucide-react";
 import { complaintService } from "@/services/complaint.service";
 import { MapView } from "@/app/components/shared/MapView";
 import { SeverityBadge } from "@/app/components/shared/SeverityBadge";
@@ -24,10 +24,12 @@ const CATEGORY_FILTERS: { key: ComplaintCategory | "all"; label: string; emoji: 
 
 interface Props {
   onComplaintSelect?: (complaint: ComplaintSummary) => void;
+  initialCategoryFilter?: ComplaintCategory | "all";
+  onBack?: () => void;
 }
 
-export function MPMapScreen({ onComplaintSelect }: Props) {
-  const [selectedCategory, setSelectedCategory] = useState<ComplaintCategory | "all">("all");
+export function MPMapScreen({ onComplaintSelect, initialCategoryFilter = "all", onBack }: Props) {
+  const [selectedCategory, setSelectedCategory] = useState<ComplaintCategory | "all">(initialCategoryFilter);
   const [view, setView] = useState<"map" | "list">("map");
   const [selectedComplaint, setSelectedComplaint] = useState<ComplaintSummary | null>(null);
 
@@ -49,7 +51,14 @@ export function MPMapScreen({ onComplaintSelect }: Props) {
       {/* Header */}
       <div className="shrink-0 pt-5 pb-3 px-5 border-b border-border">
         <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold text-foreground" style={DF}>Issue Map</h1>
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button onClick={onBack} className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center active-press">
+                <ChevronLeft size={18} className="text-foreground" />
+              </button>
+            )}
+            <h1 className="text-lg font-bold text-foreground leading-none" style={DF}>Issue Map</h1>
+          </div>
           <div className="flex gap-1 p-1 bg-secondary rounded-xl">
             <button
               onClick={() => setView("map")}

@@ -19,6 +19,7 @@ import {
 } from "@/services/ai.service";
 import { complaintService } from "@/services/complaint.service";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { uploadComplaintPhoto } from "@/services/firebase";
 import { AIProcessingPanel } from "@/app/components/shared/AIProcessingPanel";
 import { SeverityBadge } from "@/app/components/shared/SeverityBadge";
 import { CategoryIcon, getCategoryLabel } from "@/app/components/shared/CategoryIcon";
@@ -350,12 +351,21 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
     }
 
     // Create complaint in local store
+    let uploadedPhotoUrl = photoPreview || undefined;
+    if (photoFile) {
+      try {
+        uploadedPhotoUrl = await uploadComplaintPhoto(photoFile);
+      } catch (err) {
+        console.error("Error uploading photo to Firebase Storage, falling back to preview URL:", err);
+      }
+    }
+
     const complaint = complaintService.create({
       description,
       category: analysis.detectedCategory,
       location,
       citizenId: "ctz_001",
-      photoUrl: photoPreview || undefined
+      photoUrl: uploadedPhotoUrl
     });
     complaintService.applyAIAnalysis(complaint.id, analysis, score);
     setComplaintId(complaint.id);
@@ -366,14 +376,24 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
     setStep(5);
   }, [category, photoFile, description, location, imageAnalysis, photoPreview, onComplaintRegistered]);
 
-  const handleSubmitAnyway = useCallback(() => {
+  const handleSubmitAnyway = useCallback(async () => {
     if (!aiAnalysis || !impactScore) return;
+
+    let uploadedPhotoUrl = photoPreview || undefined;
+    if (photoFile) {
+      try {
+        uploadedPhotoUrl = await uploadComplaintPhoto(photoFile);
+      } catch (err) {
+        console.error("Error uploading photo to Firebase Storage, falling back to preview URL:", err);
+      }
+    }
+
     const complaint = complaintService.create({
       description,
       category: aiAnalysis.detectedCategory,
       location,
       citizenId: "ctz_001",
-      photoUrl: photoPreview || undefined
+      photoUrl: uploadedPhotoUrl
     });
     complaintService.applyAIAnalysis(complaint.id, aiAnalysis, impactScore);
     setComplaintId(complaint.id);
@@ -382,7 +402,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
       onComplaintRegistered(complaint.shortId, aiAnalysis.detectedCategory);
     }
     setStep(5);
-  }, [aiAnalysis, impactScore, description, location, photoPreview, onComplaintRegistered]);
+  }, [aiAnalysis, impactScore, description, location, photoFile, photoPreview, onComplaintRegistered]);
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(shortId).catch(() => {});

@@ -18,6 +18,8 @@ import type {
   AIComplaintAnalysis,
   ImpactScore,
 } from "@/types";
+import { db, isFirebaseConfigured } from "./firebase";
+import { collection, onSnapshot, doc, setDoc, updateDoc } from "firebase/firestore";
 
 const STORAGE_KEY = "civic_connect_complaints";
 
@@ -190,10 +192,13 @@ const SEED_COMPLAINTS: Complaint[] = [
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
-function loadComplaints(): Complaint[] {
+let cacheInitialized = false;
+let complaintsCache: Complaint[] = [];
+
+function loadComplaintsLocal(): Complaint[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initSeedData();
+    if (!raw) return initSeedDataLocal();
     const complaints = JSON.parse(raw) as Complaint[];
     
     // Migrate legacy status values from localStorage
@@ -220,17 +225,67 @@ function loadComplaints(): Complaint[] {
     });
     
     if (migrated) {
-      saveComplaints(complaints);
+      saveComplaintsLocal(complaints);
     }
     
     return complaints;
   } catch {
-    return initSeedData();
+    return initSeedDataLocal();
   }
 }
 
-function saveComplaints(complaints: Complaint[]): void {
+function saveComplaintsLocal(complaints: Complaint[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(complaints));
+}
+
+function initSeedDataLocal(): Complaint[] {
+  saveComplaintsLocal(SEED_COMPLAINTS);
+  return SEED_COMPLAINTS;
+}
+
+function setupFirestoreListener() {
+  if (isFirebaseConfigured && db) {
+    try {
+      const complaintsCol = collection(db, "complaints");
+      onSnapshot(complaintsCol, (snapshot) => {
+        const remoteComplaints: Complaint[] = [];
+        snapshot.forEach((docSnapshot) => {
+          remoteComplaints.push(docSnapshot.data() as Complaint);
+        });
+
+        if (remoteComplaints.length === 0) {
+          console.log("Firestore complaints empty, seeding from local data...");
+          const currentLocal = loadComplaintsLocal();
+          currentLocal.forEach((c) => {
+            setDoc(doc(db!, "complaints", c.id), c)
+              .catch((err) => console.error("Error seeding Firestore doc:", err));
+          });
+        } else {
+          // Sort remote complaints by reportedAt descending
+          remoteComplaints.sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
+          complaintsCache = remoteComplaints;
+          saveComplaintsLocal(remoteComplaints);
+          window.dispatchEvent(new Event("complaints_updated"));
+        }
+      });
+    } catch (err) {
+      console.error("Failed to setup Firestore listener:", err);
+    }
+  }
+}
+
+function loadComplaints(): Complaint[] {
+  if (!cacheInitialized) {
+    complaintsCache = loadComplaintsLocal();
+    cacheInitialized = true;
+    setupFirestoreListener();
+  }
+  return complaintsCache;
+}
+
+function saveComplaints(complaints: Complaint[]): void {
+  complaintsCache = complaints;
+  saveComplaintsLocal(complaints);
 }
 
 function initSeedData(): Complaint[] {
@@ -337,6 +392,10 @@ export const complaintService = {
     };
     complaints.unshift(complaint);
     saveComplaints(complaints);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, "complaints", complaint.id), complaint)
+        .catch(err => console.error("Error saving new complaint to Firestore:", err));
+    }
     return complaint;
   },
 
@@ -362,6 +421,10 @@ export const complaintService = {
       ],
     };
     saveComplaints(complaints);
+    if (isFirebaseConfigured && db) {
+      setDoc(doc(db, "complaints", id), complaints[idx])
+        .catch(err => console.error("Error saving AI analysis to Firestore:", err));
+    }
     return complaints[idx];
   },
 
@@ -375,6 +438,13 @@ export const complaintService = {
     complaints[idx].citizensJoined += 1;
     complaints[idx].updatedAt = new Date().toISOString();
     saveComplaints(complaints);
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, "complaints", complaints[idx].id), {
+        joinedCitizenIds: complaints[idx].joinedCitizenIds,
+        citizensJoined: complaints[idx].citizensJoined,
+        updatedAt: complaints[idx].updatedAt
+      }).catch(err => console.error("Error joining complaint in Firestore:", err));
+    }
     return complaints[idx];
   },
 
@@ -396,6 +466,14 @@ export const complaintService = {
       isPublic: true,
     });
     saveComplaints(complaints);
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, "complaints", id), {
+        status: complaints[idx].status,
+        updatedAt: complaints[idx].updatedAt,
+        closedAt: complaints[idx].closedAt || null,
+        statusHistory: complaints[idx].statusHistory
+      }).catch(err => console.error("Error updating status in Firestore:", err));
+    }
     return complaints[idx];
   },
 
@@ -417,6 +495,14 @@ export const complaintService = {
       isPublic: true,
     });
     saveComplaints(complaints);
+    if (isFirebaseConfigured && db) {
+      updateDoc(doc(db, "complaints", id), {
+        assignedDepartment: complaints[idx].assignedDepartment,
+        status: complaints[idx].status,
+        updatedAt: complaints[idx].updatedAt,
+        statusHistory: complaints[idx].statusHistory
+      }).catch(err => console.error("Error assigning department in Firestore:", err));
+    }
     return complaints[idx];
   },
 
@@ -449,5 +535,11 @@ export const complaintService = {
   /** Reset to seed data (dev utility) */
   reset(): void {
     initSeedData();
+    if (isFirebaseConfigured && db) {
+      SEED_COMPLAINTS.forEach(c => {
+        setDoc(doc(db!, "complaints", c.id), c)
+          .catch(err => console.error("Error seeding Firestore on reset:", err));
+      });
+    }
   },
 };

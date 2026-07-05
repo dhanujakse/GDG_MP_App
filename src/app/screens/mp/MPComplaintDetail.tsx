@@ -31,7 +31,6 @@ const DEPARTMENTS: { value: Department; label: string; icon: string }[] = [
 
 const STATUS_ACTIONS: { status: ComplaintStatus; label: string; color: string }[] = [
   { status: "in_progress", label: "Mark In Progress", color: "bg-blue-500" },
-  { status: "resolved",    label: "Mark Resolved",    color: "bg-green-500" },
   { status: "rejected",    label: "Reject",           color: "bg-red-500" },
 ];
 
@@ -122,7 +121,6 @@ export function MPComplaintDetail({ complaint: initialComplaint, onBack, onUpdat
             </h1>
             <div className="flex flex-wrap gap-2 items-center">
               <SeverityBadge severity={complaint.severity} />
-              <StatusBadge status={complaint.status} />
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <MapPin size={10} /> {complaint.ward}
               </span>
