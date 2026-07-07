@@ -81,10 +81,20 @@ interface Props {
   selectedCategory?: ComplaintCategory | "all";
 }
 
+export const WARD_GEOMETRIES: Record<string, [[number, number], [number, number]]> = {
+  "Ward 8":  [[9.9200, 78.1280], [9.9280, 78.1380]],
+  "Ward 9":  [[9.9120, 78.1180], [9.9200, 78.1280]],
+  "Ward 10": [[9.9150, 78.0950], [9.9250, 78.1050]],
+  "Ward 11": [[9.9150, 78.1050], [9.9220, 78.1150]],
+  "Ward 12": [[9.9220, 78.1150], [9.9320, 78.1250]],
+  "Ward 13": [[9.9320, 78.1100], [9.9420, 78.1220]],
+  "Ward 14": [[9.9280, 78.1250], [9.9380, 78.1350]],
+};
+
 export function MapView({ complaints, height = "100%", onComplaintClick, selectedCategory = "all" }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const markersRef = useRef<L.Marker[]>([]);
+  const polygonsRef = useRef<L.Rectangle[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Initialize map
@@ -98,17 +108,11 @@ export function MapView({ complaints, height = "100%", onComplaintClick, selecte
       attributionControl: true,
     });
 
-    // OpenStreetMap tiles — free, no API key
+    // OpenStreetMap tiles
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
     }).addTo(map);
-
-    // Ward boundary mock — a rough rectangle around Madurai center
-    L.rectangle(
-      [[9.9100, 78.0950], [9.9450, 78.1500]],
-      { color: "#166534", weight: 2, fillOpacity: 0.04, dashArray: "6, 4" }
-    ).addTo(map);
 
     mapRef.current = map;
     setIsLoaded(true);
@@ -119,62 +123,101 @@ export function MapView({ complaints, height = "100%", onComplaintClick, selecte
     };
   }, []);
 
-  // Update markers when complaints or filter changes
+  // Update ward rectangles when complaints or category filters change
   useEffect(() => {
     if (!mapRef.current || !isLoaded) return;
     const map = mapRef.current;
 
-    // Remove old markers
-    markersRef.current.forEach((m) => m.remove());
-    markersRef.current = [];
+    // Remove old polygons
+    polygonsRef.current.forEach((p) => p.remove());
+    polygonsRef.current = [];
 
+    // Filter complaints by category if not 'all'
     const filtered = selectedCategory === "all"
       ? complaints
       : complaints.filter((c) => c.category === selectedCategory);
 
-    filtered.forEach((complaint) => {
-      const icon = createComplaintIcon(complaint);
-      const marker = L.marker([complaint.location.lat, complaint.location.lng], { icon });
+    // Calculate dynamic ward metrics
+    Object.keys(WARD_GEOMETRIES).forEach((wardName) => {
+      const wardComplaints = filtered.filter((c) => c.ward === wardName);
+      const count = wardComplaints.length;
 
-      const severityColor = SEVERITY_COLORS[complaint.severity];
-      marker.bindPopup(`
-        <div style="min-width:180px; font-family: system-ui, sans-serif;">
-          <div style="font-weight:700; font-size:13px; color:#0f172a; margin-bottom:4px;">
-            ${complaint.title}
-          </div>
-          <div style="
-            display:inline-block;
-            padding: 2px 8px;
-            border-radius: 9999px;
-            background: ${severityColor}22;
-            color: ${severityColor};
-            font-size: 10px;
-            font-weight: 700;
-            margin-bottom: 6px;
-          ">${complaint.severity.toUpperCase()}</div>
-          <div style="font-size:11px; color:#64748b; margin-bottom:4px;">
-            📍 ${complaint.ward} · ${complaint.citizensJoined + 1} citizens
-          </div>
-          <div style="font-size:11px; color:#64748b;">
-            Impact Score: <strong style="color:${severityColor}">${complaint.impactScore}/100</strong>
-          </div>
-        </div>
-      `, { maxWidth: 220 });
-
-      marker.on("click", () => {
-        onComplaintClick?.(complaint);
+      // Calculate top category
+      const categoriesFreq: Record<string, number> = {};
+      let topCategory = "None";
+      let maxFreq = 0;
+      wardComplaints.forEach((c) => {
+        categoriesFreq[c.category] = (categoriesFreq[c.category] || 0) + 1;
+        if (categoriesFreq[c.category] > maxFreq) {
+          maxFreq = categoriesFreq[c.category];
+          topCategory = c.category.charAt(0).toUpperCase() + c.category.slice(1);
+        }
       });
 
-      marker.addTo(map);
-      markersRef.current.push(marker);
+      // Dynamic population affected calculation: based on citizen joins & category weights
+      const populationAffected = wardComplaints.reduce(
+        (acc, c) => acc + (c.citizensJoined + 1) * 20, 
+        0
+      );
+
+      // Trend label
+      const trend = count > 3 ? "Rising" : count > 0 ? "Stable" : "Clear";
+
+      // Most recent AI Insight (or default message)
+      const mostRecentInsight = wardComplaints.length > 0
+        ? wardComplaints[0].mpSummary || "Active priority reports filed."
+        : "No active reports detected.";
+
+      // Color intensity based on density count
+      let color = "#22c55e"; // Green (0 reports)
+      if (count >= 5) color = "#ef4444"; // Red (5+ reports)
+      else if (count >= 3) color = "#f97316"; // Orange (3-4 reports)
+      else if (count >= 1) color = "#eab308"; // Yellow (1-2 reports)
+
+      const bounds = WARD_GEOMETRIES[wardName];
+      const rect = L.rectangle(bounds, {
+        color: color,
+        weight: 2,
+        fillColor: color,
+        fillOpacity: 0.35,
+      });
+
+      // Dynamic popup structured as GDS style summary
+      const popupContent = `
+        <div style="min-width: 200px; font-family: system-ui, sans-serif; padding: 4px;">
+          <h4 style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+            ${wardName} Details
+          </h4>
+          <table style="width: 100%; border-collapse: collapse; font-size: 11px; color: #334155; margin-bottom: 6px;">
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 3px 0; font-weight: 500;">Active Reports:</td>
+              <td style="padding: 3px 0; text-align: right; font-weight: 700; color: #0f172a;">${count}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 3px 0; font-weight: 500;">Top Category:</td>
+              <td style="padding: 3px 0; text-align: right; font-weight: 700; color: #0f172a;">${topCategory}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 3px 0; font-weight: 500;">Est. Impact:</td>
+              <td style="padding: 3px 0; text-align: right; font-weight: 700; color: #0f172a;">~${populationAffected} citizens</td>
+            </tr>
+            <tr>
+              <td style="padding: 3px 0; font-weight: 500;">Trend:</td>
+              <td style="padding: 3px 0; text-align: right; font-weight: 700; color: ${color};">${trend}</td>
+            </tr>
+          </table>
+          <div style="font-size: 10.5px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 5px; line-height: 1.3;">
+            <strong>AI Insight:</strong> ${mostRecentInsight}
+          </div>
+        </div>
+      `;
+
+      rect.bindPopup(popupContent, { maxWidth: 240 });
+      rect.addTo(map);
+      polygonsRef.current.push(rect);
     });
 
-    // Fit bounds to markers if any exist
-    if (markersRef.current.length > 0 && filtered.length > 1) {
-      const group = L.featureGroup(markersRef.current);
-      map.fitBounds(group.getBounds().pad(0.2));
-    }
-  }, [complaints, isLoaded, selectedCategory, onComplaintClick]);
+  }, [complaints, isLoaded, selectedCategory]);
 
   return (
     <div style={{ height, width: "100%", position: "relative" }}>

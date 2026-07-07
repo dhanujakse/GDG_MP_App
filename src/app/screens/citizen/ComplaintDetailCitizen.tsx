@@ -30,8 +30,9 @@ function formatTimeAgo(isoString: string): string {
 }
 
 export function ComplaintDetailCitizen({ complaint, onBack, onJoin }: Props) {
-  const isOwner = complaint.reportedBy === "ctz_001";
-  const hasJoined = complaint.joinedCitizenIds.includes("ctz_001");
+  const citizenId = localStorage.getItem("onboard_phone") || "ctz_001";
+  const isOwner = complaint.reportedBy === citizenId;
+  const hasJoined = complaint.joinedCitizenIds.includes(citizenId);
   const canJoin = !isOwner && !hasJoined;
 
   return (
@@ -56,11 +57,13 @@ export function ComplaintDetailCitizen({ complaint, onBack, onJoin }: Props) {
       <div className="flex-1 overflow-y-auto scrollbar-none pb-5">
 
         {/* Photo */}
-        {complaint.photos.length > 0 ? (
-          <img src={complaint.photos[0].url} alt="Complaint" className="w-full h-44 object-cover" />
+        {complaint.photos.length > 0 && !complaint.photos[0].url.includes("unsplash.com") ? (
+          <img src={complaint.photos[0].url} alt="Evidence" className="w-full h-44 object-cover" />
         ) : (
-          <div className="w-full h-32 bg-muted flex items-center justify-center">
-            <CategoryIcon category={complaint.category} size={32} showBg bgSize="w-14 h-14" />
+          <div className="px-5 pt-4">
+            <div className="w-full py-8 border border-dashed border-border rounded-2xl flex flex-col items-center justify-center bg-secondary/10">
+              <span className="text-xs text-muted-foreground font-semibold">No Evidence Uploaded</span>
+            </div>
           </div>
         )}
 

@@ -29,13 +29,13 @@ const SEED_COMPLAINTS: Complaint[] = [
   {
     id: "cmp_001",
     shortId: "CHN-2024-0712",
-    title: "No Drinking Water — 3 Days",
+    title: "No Drinking Water for 3 Days",
     description: "There has been no water supply in our area for the past 3 days. The main pipe on MG Road appears to have burst and nobody has come to repair it. Over 200 families are affected.",
     category: "water",
     status: "in_progress",
     severity: "critical",
     location: { lat: 9.9252, lng: 78.1198, address: "MG Road, KK Nagar", ward: "Ward 12", district: "Madurai", pincode: "625020" },
-    photos: [{ id: "ph_001", url: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400", thumbnailUrl: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=200", uploadedAt: "2024-07-01T08:00:00Z", uploadedBy: "ctz_seed_001" }],
+    photos: [],
     citizensJoined: 23,
     joinedCitizenIds: [],
     reportedBy: "ctz_seed_001",
@@ -69,7 +69,7 @@ const SEED_COMPLAINTS: Complaint[] = [
   {
     id: "cmp_002",
     shortId: "CHN-2024-0645",
-    title: "Garbage Not Collected — 5 Days",
+    title: "Garbage Not Collected for 5 Days",
     description: "Garbage bins are overflowing and have not been collected for 5 days. The smell is unbearable and is a health hazard for the residents.",
     category: "sanitation",
     status: "in_progress",
@@ -147,10 +147,10 @@ const SEED_COMPLAINTS: Complaint[] = [
       severity: "critical",
       confidenceScore: 0.91,
       citizenSummary: "Drainage blockage complaint has been registered. Storm Water Department will inspect within 48 hours.",
-      mpSummary: "Critical sewage overflow on MG Road, Ward 8. 32 citizens affected. Health emergency risk — Storm Water Dept. immediate intervention required.",
+      mpSummary: "Critical sewage overflow on MG Road, Ward 8. 32 citizens affected. Health emergency risk: Storm Water Dept. immediate intervention required.",
       governmentNote: "Open sewage exposure. Waterborne disease risk. Field officer must visit same day.",
       suggestedAction: "Immediately assign Storm Water Department for emergency drain repair.",
-      keyFacts: ["32 citizens joined this report", "Location: Ward 8", "Blocked storm drain", "Sewage backup — health emergency"],
+      keyFacts: ["32 citizens joined this report", "Location: Ward 8", "Blocked storm drain", "Sewage backup health emergency"],
       aiReasoning: "Critical severity due to public health emergency risk from open sewage exposure.",
       processingTimeMs: 1100,
     },
@@ -166,7 +166,7 @@ const SEED_COMPLAINTS: Complaint[] = [
   {
     id: "cmp_005",
     shortId: "JV-0002",
-    title: "Street Lights Dead — Entire Block",
+    title: "Street Lights Dead across Entire Block",
     description: "All street lights on Anna Nagar Main Street have been non-functional for a week.",
     category: "electricity",
     status: "in_progress",
@@ -204,6 +204,14 @@ function loadComplaintsLocal(): Complaint[] {
     // Migrate legacy status values from localStorage
     let migrated = false;
     complaints.forEach((c) => {
+      // Migrate legacy hyphenated titles to clean phrasing
+      if (c.title.includes(" — ")) {
+        c.title = c.title.replace("No Drinking Water — 3 Days", "No Drinking Water for 3 Days")
+                         .replace("Garbage Not Collected — 5 Days", "Garbage Not Collected for 5 Days")
+                         .replace("Street Lights Dead — Entire Block", "Street Lights Dead across Entire Block")
+                         .replace(" — ", " ");
+        migrated = true;
+      }
       if ((c.status as string) === "pending_review") {
         c.status = "submitted";
         migrated = true;
@@ -286,6 +294,9 @@ function loadComplaints(): Complaint[] {
 function saveComplaints(complaints: Complaint[]): void {
   complaintsCache = complaints;
   saveComplaintsLocal(complaints);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("complaints_updated"));
+  }
 }
 
 function initSeedData(): Complaint[] {

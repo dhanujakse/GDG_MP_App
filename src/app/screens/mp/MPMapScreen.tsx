@@ -13,13 +13,13 @@ import type { ComplaintSummary, ComplaintCategory } from "@/types";
 
 const DF: React.CSSProperties = { fontFamily: "var(--font-display)" };
 
-const CATEGORY_FILTERS: { key: ComplaintCategory | "all"; label: string; emoji: string }[] = [
-  { key: "all",         label: "All",     emoji: "📍" },
-  { key: "water",       label: "Water",   emoji: "💧" },
-  { key: "sanitation",  label: "Garbage", emoji: "🗑️" },
-  { key: "roads",       label: "Roads",   emoji: "🛣️" },
-  { key: "electricity", label: "Lights",  emoji: "💡" },
-  { key: "drainage",    label: "Drain",   emoji: "🌊" },
+const CATEGORY_FILTERS: { key: ComplaintCategory | "all"; label: string }[] = [
+  { key: "all",         label: "All Categories" },
+  { key: "water",       label: "Water" },
+  { key: "sanitation",  label: "Sanitation" },
+  { key: "roads",       label: "Roads" },
+  { key: "electricity", label: "Electricity" },
+  { key: "drainage",    label: "Drainage" },
 ];
 
 interface Props {
@@ -79,12 +79,11 @@ export function MPMapScreen({ onComplaintSelect, initialCategoryFilter = "all", 
             <button
               key={f.key}
               onClick={() => setSelectedCategory(f.key)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all shrink-0 ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all shrink-0 ${
                 selectedCategory === f.key
                   ? "bg-primary text-white"
                   : "bg-secondary text-muted-foreground border border-border"
               }`}>
-              <span>{f.emoji}</span>
               {f.label}
             </button>
           ))}
@@ -94,15 +93,13 @@ export function MPMapScreen({ onComplaintSelect, initialCategoryFilter = "all", 
       {/* Stats bar */}
       <div className="shrink-0 px-5 py-2 bg-secondary/50 flex items-center gap-4 border-b border-border">
         <span className="text-xs font-bold text-foreground">
-          {filteredComplaints.length} complaint{filteredComplaints.length !== 1 ? "s" : ""}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          {filteredComplaints.filter((c) => c.severity === "critical").length} critical
+          {filteredComplaints.length} active report{filteredComplaints.length !== 1 ? "s" : ""}
         </span>
         <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Critical
-          <span className="w-2 h-2 rounded-full bg-orange-500 inline-block ml-2" /> High
-          <span className="w-2 h-2 rounded-full bg-amber-500 inline-block ml-2" /> Medium
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#ef4444] inline-block" /> 5+ (High)
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#f97316] inline-block ml-2" /> 3-4 (Moderate)
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#eab308] inline-block ml-2" /> 1-2 (Low)
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#22c55e] inline-block ml-2" /> 0 (Clear)
         </span>
       </div>
 

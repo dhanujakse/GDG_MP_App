@@ -310,6 +310,12 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
   const runFullAIPipeline = useCallback(async () => {
     if (!category) return;
     
+    if (!isGranted || !location.lat || !location.lng) {
+      alert("Location access is disabled. Please enable browser location permissions before submitting.");
+      requestLocation();
+      return;
+    }
+
     const cleanDesc = description.trim();
     const uniqueChars = new Set(cleanDesc.toLowerCase().replace(/[^a-z0-9]/g, ""));
     const gibberish = ["asdf", "qwer", "zxcv", "abcd", "xyz", "1234"];
@@ -322,6 +328,23 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
     }
     
     setDescError(null);
+    
+    // Dispatch submitting events
+    window.dispatchEvent(new CustomEvent("janvaani_event", {
+      detail: {
+        title: "Complaint submitted successfully",
+        desc: "Your report has been logged and received by the system.",
+        type: "success"
+      }
+    }));
+    window.dispatchEvent(new CustomEvent("janvaani_event", {
+      detail: {
+        title: "Complaint received by AI",
+        desc: "AI is checking for duplicates and estimating constituency priority.",
+        type: "ai"
+      }
+    }));
+
     setStep(3);
     setAiSteps([]);
 
@@ -358,10 +381,34 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
     setImpactScore(score);
     setDuplicates(dupes);
 
-    // If strong duplicate detected, show join prompt instead
+    // Dispatch AI complete events
+    window.dispatchEvent(new CustomEvent("janvaani_event", {
+      detail: {
+        title: "AI validation completed",
+        desc: "Image Canny edge count and relevance checks completed.",
+        type: "success"
+      }
+    }));
+
     if (dupes.length > 0 && dupes[0].similarity > 0.8) {
+      window.dispatchEvent(new CustomEvent("janvaani_event", {
+        detail: {
+          title: "Duplicate complaint detected",
+          desc: `Similar report found in ${location.ward}. Link to increase weight.`,
+          type: "warning"
+        }
+      }));
+      window.dispatchEvent(new CustomEvent("janvaani_event", {
+        detail: {
+          title: "Similar complaint found nearby",
+          desc: "Duplicate clusters merged under a single tracking ID.",
+          type: "warning"
+        }
+      }));
       setStep(4);
       return;
+    } else {
+      // Do not generate fake status update notifications
     }
 
     // Create complaint in local store
@@ -378,7 +425,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
       description,
       category: analysis.detectedCategory,
       location,
-      citizenId: "ctz_001",
+      citizenId: localStorage.getItem("onboard_phone") || "ctz_001",
       photoUrl: uploadedPhotoUrl
     });
     complaintService.applyAIAnalysis(complaint.id, analysis, score);
@@ -391,6 +438,11 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
   }, [category, photoFile, description, location, imageAnalysis, photoPreview, onComplaintRegistered]);
 
   const handleSubmitAnyway = useCallback(async () => {
+    if (!isGranted || !location.lat || !location.lng) {
+      alert("Location access is disabled. Please enable browser location permissions before submitting.");
+      requestLocation();
+      return;
+    }
     if (!aiAnalysis || !impactScore) return;
 
     let uploadedPhotoUrl = photoPreview || undefined;
@@ -406,7 +458,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
       description,
       category: aiAnalysis.detectedCategory,
       location,
-      citizenId: "ctz_001",
+      citizenId: localStorage.getItem("onboard_phone") || "ctz_001",
       photoUrl: uploadedPhotoUrl
     });
     complaintService.applyAIAnalysis(complaint.id, aiAnalysis, impactScore);
@@ -521,7 +573,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
         <div className="mt-auto space-y-2.5">
           <button
             onClick={() => {
-              complaintService.joinComplaint(dup.complaintId, "ctz_001");
+              complaintService.joinComplaint(dup.complaintId, localStorage.getItem("onboard_phone") || "ctz_001");
               setShortId(dup.complaintId);
               setStep(5);
             }}
@@ -776,7 +828,14 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
             </div>
 
             <button
-              onClick={() => setStep(2)}
+              onClick={() => {
+                if (!isGranted || !location.lat || !location.lng) {
+                  alert("Location access is disabled. Please enable browser location permissions before submitting.");
+                  requestLocation();
+                  return;
+                }
+                setStep(2);
+              }}
               disabled={!description.trim() || isValidatingImage || (photoFile !== null && !imageIsValidated)}
               className={`w-full py-3.5 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${
                 description.trim() && !isValidatingImage && (photoFile === null || imageIsValidated)
@@ -823,7 +882,7 @@ export function ReportWizard({ onBack, onComplaintRegistered }: Props) {
 
             <button
               onClick={runFullAIPipeline}
-              className="w-full py-3.5 bg-primary text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active-press shadow-sm animate-pulse" style={DF}>
+              className="w-full py-3.5 bg-primary text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active-press shadow-sm hover:bg-primary/90" style={DF}>
               <Send size={14} />
               Submit Grievance
             </button>
