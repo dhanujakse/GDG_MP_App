@@ -5,7 +5,7 @@
 // All business logic lives in services/. All screen logic lives in screens/.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   MapPin, Mic, Home, Plus, ClipboardList, User,
   CheckCircle, ChevronRight, Users, Bell, Phone,
@@ -17,11 +17,11 @@ import {
   RefreshCw, Globe, Map as MapIcon, Cpu, Copy, Share2
 } from "lucide-react";
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { complaintService } from "@/services/complaint.service";
+import { complaintService, calculateDynamicImpactScore } from "@/services/complaint.service";
 import { uploadCitizenDP } from "@/services/firebase";
 import { ReportWizard } from "@/app/screens/citizen/ReportWizard";
 import { ComplaintDetailCitizen } from "@/app/screens/citizen/ComplaintDetailCitizen";
-import { MPComplaintDetail, calculateDynamicImpactScore } from "@/app/screens/mp/MPComplaintDetail";
+import { MPComplaintDetail } from "@/app/screens/mp/MPComplaintDetail";
 import { MPMapScreen } from "@/app/screens/mp/MPMapScreen";
 import { WARD_GEOMETRIES } from "@/app/components/shared/MapView";
 import { SeverityBadge } from "@/app/components/shared/SeverityBadge";
@@ -29,12 +29,141 @@ import { StatusBadge } from "@/app/components/shared/StatusBadge";
 import { CategoryIcon, getCategoryLabel, getCategoryEmoji } from "@/app/components/shared/CategoryIcon";
 import { ImpactScoreMeter } from "@/app/components/shared/ImpactScoreMeter";
 import type { Complaint, ComplaintSummary, ComplaintStatus, ComplaintCategory } from "@/types";
+import { INDIA_STATES, getDistricts, getCities } from "@/data/india-locations";
 
 type Phase = "onboard" | "citizen" | "mp";
 type CitizenTab = "home" | "report" | "complaints" | "profile" | "detail";
 type MPTab = "dashboard" | "priority" | "map" | "budget" | "profile" | "detail";
 
 const DF: React.CSSProperties = { fontFamily: "var(--font-display)" };
+
+function FilterableReportsModal({
+  title,
+  initialCategory,
+  initialWard,
+  onClose,
+  onSelect
+}: {
+  title: string;
+  initialCategory: string;
+  initialWard: string;
+  onClose: () => void;
+  onSelect: (c: Complaint) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [wardFilter, setWardFilter] = useState(initialWard);
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory);
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
+
+  const allReports = complaintService.getAll();
+  const wardsList = Array.from(new Set(allReports.map(r => r.ward)));
+
+  const filtered = allReports.filter(r => {
+    const matchesSearch = r.title.toLowerCase().includes(search.toLowerCase()) || r.shortId.toLowerCase().includes(search.toLowerCase());
+    const matchesWard = wardFilter === "all" ? true : r.ward === wardFilter;
+    const matchesCategory = categoryFilter === "all" ? true : r.category === categoryFilter;
+    const matchesPriority = priorityFilter === "all" ? true : r.severity === priorityFilter;
+    
+    let matchesDate = true;
+    if (dateFilter !== "all") {
+      const ageMs = Date.now() - new Date(r.reportedAt).getTime();
+      const ageHours = ageMs / (1000 * 60 * 60);
+      if (dateFilter === "24h") matchesDate = ageHours <= 24;
+      else if (dateFilter === "7d") matchesDate = ageHours <= 168;
+      else if (dateFilter === "30d") matchesDate = ageHours <= 720;
+    }
+    return matchesSearch && matchesWard && matchesCategory && matchesPriority && matchesDate;
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-5 font-sans animate-fadeIn">
+      <div className="bg-card w-full max-w-md rounded-2xl border border-border p-6 shadow-2xl relative animate-slideUp flex flex-col max-h-[80vh]">
+        <div className="flex justify-between items-center pb-3 border-b border-border/80 shrink-0">
+          <div>
+            <h3 className="text-sm font-extrabold text-foreground leading-snug">{title}</h3>
+            <p className="text-[10px] text-muted-foreground font-mono font-bold mt-0.5">{filtered.length} Reports Found</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-xs px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-bold rounded-lg transition-colors">
+            Close
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="my-3 space-y-2 shrink-0 animate-fadeIn">
+          <input
+            type="text"
+            placeholder="Search by title or ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full px-3 py-2 bg-secondary border border-border rounded-xl text-xs focus:outline-none focus:border-primary font-medium"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={wardFilter}
+              onChange={(e) => setWardFilter(e.target.value)}
+              className="px-2 py-1.5 bg-secondary border border-border rounded-lg text-[10px] font-bold text-foreground focus:outline-none focus:border-primary">
+              <option value="all">All Wards</option>
+              {wardsList.map(w => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-2 py-1.5 bg-secondary border border-border rounded-lg text-[10px] font-bold text-foreground focus:outline-none focus:border-primary">
+              <option value="all">All Categories</option>
+              <option value="water">Water</option>
+              <option value="roads">Roads</option>
+              <option value="drainage">Drainage</option>
+              <option value="electricity">Electricity</option>
+              <option value="sanitation">Sanitation</option>
+              <option value="healthcare">Healthcare</option>
+              <option value="education">Education</option>
+              <option value="transport">Transport</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Scrollable list */}
+        <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 scrollbar-thin mt-3">
+          {filtered.length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-6 font-semibold">No matching reports found</p>
+          ) : (
+            filtered.map((r) => {
+              const full = complaintService.getById(r.id);
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    if (full) {
+                      onSelect(full);
+                      onClose();
+                    }
+                  }}
+                  className="w-full text-left p-3.5 bg-secondary/35 hover:bg-secondary/60 border border-border/60 rounded-xl flex items-center justify-between text-xs font-semibold active-press transition-colors shadow-sm animate-fadeIn">
+                  <div className="flex-1 pr-3 truncate">
+                    <p className="font-bold text-foreground truncate">{r.title}</p>
+                    <p className="text-[9.5px] text-muted-foreground mt-0.5">{r.ward} · {r.shortId}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded font-mono ${
+                      r.severity === "critical" ? "bg-red-50 text-red-650" : r.severity === "high" ? "bg-amber-50 text-amber-650" : "bg-blue-50 text-blue-650"
+                    } font-black border`}>
+                      {r.severity.toUpperCase()}
+                    </span>
+                    <p className="text-[10px] text-primary font-black mt-1 font-mono">{r.impactScore} pts</p>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Chart + health score data (MP dashboard) ─────────────────────────────────
 const trendData = [
@@ -69,6 +198,17 @@ const getT = (lang: string, key: string): string => {
 };
 
 // ════════════════════════════════════════════════════════════════════
+const TAMIL_NADU_CONSTITUENCIES = [
+  "Arakkonam", "Arani", "Chennai Central", "Chennai North", "Chennai South",
+  "Chidambaram", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul",
+  "Erode", "Kallakurichi", "Kancheepuram", "Kanniyakumari", "Karur",
+  "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam", "Namakkal",
+  "Nilgiris", "Perambalur", "Pollachi", "Ramanathapuram", "Salem",
+  "Sivaganga", "Sriperumbudur", "Tenkasi", "Thanjavur", "Theni",
+  "Thoothukkudi", "Tiruchirappalli", "Tirunelveli", "Tiruppur", "Tiruvallur",
+  "Tiruvannamalai", "Vellore", "Viluppuram", "Virudhunagar"
+];
+
 // ONBOARDING
 // ════════════════════════════════════════════════════════════════════
 function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
@@ -79,12 +219,48 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   const [otp, setOtp] = useState(() => localStorage.getItem("onboard_otp") || "");
   const [ward, setWard] = useState(() => localStorage.getItem("onboard_ward") || "");
   const [name, setName] = useState(() => localStorage.getItem("onboard_name") || "");
+  const [constituencySearch, setConstituencySearch] = useState("");
 
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [gpsDone, setGpsDone] = useState(false);
   const [manualCity, setManualCity] = useState(() => localStorage.getItem("onboard_city") || "");
   const [manualDistrict, setManualDistrict] = useState(() => localStorage.getItem("onboard_district") || "");
+  const [manualState, setManualState] = useState(() => localStorage.getItem("onboard_state") || "");
+
+  const [expirySeconds, setExpirySeconds] = useState(300);
+  const [resendSeconds, setResendSeconds] = useState(45);
+
+  useEffect(() => {
+    if (step !== 3) return;
+    const interval = setInterval(() => {
+      setExpirySeconds((prev) => {
+        if (prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+      setResendSeconds((prev) => {
+        if (prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [step]);
+
+  const handleResendOTP = () => {
+    setExpirySeconds(300);
+    setResendSeconds(45);
+    setOtp("");
+  };
+
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const [wardNumber, setWardNumber] = useState(() => {
     const saved = localStorage.getItem("onboard_ward") || "";
@@ -121,6 +297,107 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   useEffect(() => { localStorage.setItem("onboard_name", name); }, [name]);
   useEffect(() => { localStorage.setItem("onboard_city", manualCity); }, [manualCity]);
   useEffect(() => { localStorage.setItem("onboard_district", manualDistrict); }, [manualDistrict]);
+  useEffect(() => { localStorage.setItem("onboard_state", manualState); }, [manualState]);
+
+  const [gpsPermissionRequested, setGpsPermissionRequested] = useState(false);
+  const [gpsStatusStep, setGpsStatusStep] = useState<
+    "" | "requesting" | "granted" | "captured" | "geocoding" | "verified" | "error"
+  >("");
+
+  const handleRequestGps = () => {
+    setGpsPermissionRequested(true);
+    setGpsLoading(true);
+    setGpsError(null);
+    setGpsStatusStep("requesting");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGpsStatusStep("granted");
+        
+        setTimeout(() => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          localStorage.setItem("onboard_lat", lat.toString());
+          localStorage.setItem("onboard_lng", lng.toString());
+          setGpsStatusStep("captured");
+
+          setTimeout(() => {
+            setGpsStatusStep("geocoding");
+
+            // OpenStreetMap Nominatim reverse API fetch
+            fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`)
+              .then(res => res.json())
+              .then(data => {
+                const address = data.address || {};
+                const city = address.city || address.town || address.village || address.suburb || "Madurai";
+                const district = address.county || address.state_district || "Madurai";
+                const state = address.state || "Tamil Nadu";
+                const suburb = address.suburb || address.neighbourhood || "KK Nagar";
+
+                // Estimate ward based on Nominatim values or default
+                let detectedWard = "";
+                if (address.suburb && address.suburb.toLowerCase().includes("ward")) {
+                  detectedWard = address.suburb;
+                } else if (address.quarter && address.quarter.toLowerCase().includes("ward")) {
+                  detectedWard = address.quarter;
+                } else {
+                  // If ward cannot be determined, ask user to select manual ward number
+                  detectedWard = "";
+                }
+
+                setWardNumber(detectedWard);
+                setAreaName(suburb);
+                setManualCity(city);
+                setManualDistrict(district);
+                
+                setGpsStatusStep("verified");
+                setGpsLoading(false);
+                setGpsDone(true);
+              })
+              .catch(() => {
+                // Fallback local resolution
+                let detectedCity = "Madurai";
+                let detectedDistrict = "Madurai";
+                let detectedWard = "Ward 12";
+                let detectedArea = "KK Nagar";
+
+                if (Math.abs(lat - 9.92) > 0.3 || Math.abs(lng - 78.12) > 0.3) {
+                  detectedCity = "Chennai";
+                  detectedDistrict = "Chennai";
+                  detectedWard = "Ward 45";
+                  detectedArea = "Anna Nagar";
+                }
+
+                setWardNumber(detectedWard);
+                setAreaName(detectedArea);
+                setManualCity(detectedCity);
+                setManualDistrict(detectedDistrict);
+                
+                setGpsStatusStep("verified");
+                setGpsLoading(false);
+                setGpsDone(true);
+              });
+          }, 800);
+        }, 800);
+      },
+      (err) => {
+        setGpsLoading(false);
+        setGpsStatusStep("error");
+        setGpsError("Location permission denied. Please enter manual details below.");
+      },
+      { timeout: 8000 }
+    );
+  };
+
+  useEffect(() => {
+    if (step === 4 && role === "citizen" && !gpsPermissionRequested) {
+      handleRequestGps();
+    }
+  }, [step, role, gpsPermissionRequested]);
+
+  const filteredConstituencies = TAMIL_NADU_CONSTITUENCIES.filter(c =>
+    c.toLowerCase().includes(constituencySearch.toLowerCase())
+  );
 
   const langs = [
     { code: "hi", native: "हिंदी", en: "Hindi", bg: "bg-orange-50 border-orange-200" },
@@ -142,18 +419,21 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
     : phone.includes("@") && phone.length > 3;
 
   const isWardValid = role === "citizen"
-    ? name.trim().length >= 2 && wardNumber !== "" && areaName.trim().length >= 2 && manualCity.trim().length >= 2 && manualDistrict.trim().length >= 2
+    ? gpsDone
+      ? name.trim().length >= 2 && wardNumber !== "" && areaName.trim().length >= 2
+      : name.trim().length >= 2 && wardNumber !== "" && areaName.trim().length >= 2
+           && (gpsStatusStep === "verified" || (manualState !== "" && manualCity !== ""))
     : ward !== "";
 
   // Step 0 — Language
   if (step === 0) return (
     <div className="flex flex-col h-full overflow-y-auto px-5 pt-8 pb-6 animate-fadeIn scrollbar-none">
       <div className="mb-6">
-        <div className="mb-4 w-16 h-16 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-2.5">
+        <div className="mb-4 w-20 h-20 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-1">
           <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-1" style={DF}>Choose Language</h1>
-        <p className="text-sm text-muted-foreground">Select your preferred language · अपनी भाषा चुनें</p>
+        <p className="text-sm text-muted-foreground">Select your preferred language</p>
       </div>
       <div className="grid grid-cols-2 gap-3 pb-4">
         {langs.map(l => (
@@ -233,84 +513,66 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
   );
 
   // Step 3 — OTP
-  if (step === 3) return (
-    <div className="flex flex-col h-full px-5 pt-8 pb-6 animate-fadeIn">
-      <button onClick={() => setStep(2)} className="flex items-center gap-1 text-xs text-muted-foreground mb-6">
-        <ChevronLeft size={14} /> Back
-      </button>
-      <h1 className="text-2xl font-bold text-foreground mb-1" style={DF}>Enter OTP</h1>
-      <p className="text-sm text-muted-foreground mb-1">
-        Sent to {role === "citizen" ? `+91 ${phone}` : phone}
-      </p>
-      <p className="text-xs text-muted-foreground mb-6">
-        Expires in 5 minutes · <span className="text-primary font-semibold">Resend in 45s</span>
-      </p>
-      <div className="relative mb-2">
-        <div className="flex gap-2">
-          {[0, 1, 2, 3, 4, 5].map(i => (
-            <div key={i} className={`flex-1 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-colors ${otp.length === i ? "border-primary" : otp.length > i ? "border-primary/40 bg-secondary" : "border-border bg-secondary"}`}>
-              {otp[i] || ""}
-            </div>
-          ))}
+  if (step === 3) {
+    const isExpired = expirySeconds === 0;
+    const canResend = resendSeconds === 0;
+
+    return (
+      <div className="flex flex-col h-full px-5 pt-8 pb-6 animate-fadeIn font-sans">
+        <button onClick={() => setStep(2)} className="flex items-center gap-1 text-xs text-muted-foreground mb-6">
+          <ChevronLeft size={14} /> Back
+        </button>
+        <h1 className="text-2xl font-bold text-foreground mb-1" style={DF}>Enter OTP</h1>
+        <p className="text-sm text-muted-foreground mb-2">
+          Sent to {role === "citizen" ? `+91 ${phone}` : phone}
+        </p>
+
+        {/* Dynamic Timers display */}
+        <div className="flex flex-col gap-1.5 text-xs mb-6 px-1">
+          <div className="flex justify-between items-center">
+            <span className={isExpired ? "text-red-500 font-bold" : "text-muted-foreground"}>
+              {isExpired ? "OTP expired. Please request a new OTP." : `Expires in: ${formatTime(expirySeconds)}`}
+            </span>
+            {canResend ? (
+              <button onClick={handleResendOTP} className="text-primary font-bold active-press hover:underline">
+                Resend OTP
+              </button>
+            ) : (
+              <span className="text-muted-foreground font-medium">
+                Resend in: {formatTime(resendSeconds)}
+              </span>
+            )}
+          </div>
         </div>
-        <input type="tel" maxLength={6} value={otp} autoFocus
-          onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+
+        <div className="relative mb-2">
+          <div className="flex gap-2">
+            {[0, 1, 2, 3, 4, 5].map(i => (
+              <div key={i} className={`flex-1 h-14 rounded-xl border-2 flex items-center justify-center text-xl font-bold transition-colors ${isExpired ? "border-red-200 bg-red-50/20 text-red-300" : otp.length === i ? "border-primary" : otp.length > i ? "border-primary/40 bg-secondary" : "border-border bg-secondary"}`}>
+                {otp[i] || ""}
+              </div>
+            ))}
+          </div>
+          <input type="tel" maxLength={6} value={otp} autoFocus disabled={isExpired}
+            onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer disabled:cursor-not-allowed" />
+        </div>
+
+        <button onClick={() => !isExpired && setOtp("847291")} disabled={isExpired}
+          className="text-xs text-primary font-semibold text-left mb-6 disabled:opacity-50 disabled:cursor-not-allowed">
+          Demo: Auto-fill OTP →
+        </button>
+
+        <button onClick={() => setStep(4)} disabled={otp.length < 6 || isExpired}
+          className={`w-full py-4 rounded-2xl font-bold mt-auto transition-all ${otp.length >= 6 && !isExpired ? "bg-primary text-white active-press" : "bg-secondary text-muted-foreground cursor-not-allowed"}`}
+          style={DF}>
+          Verify OTP
+        </button>
       </div>
-      <button onClick={() => setOtp("847291")} className="text-xs text-primary font-semibold text-left mb-6">
-        Demo: Auto-fill OTP →
-      </button>
-      <button onClick={() => setStep(4)} disabled={otp.length < 6}
-        className={`w-full py-4 rounded-2xl font-bold mt-auto ${otp.length >= 6 ? "bg-primary text-white" : "bg-secondary text-muted-foreground"}`}
-        style={DF}>
-        Verify OTP
-      </button>
-    </div>
-  );
-
-  const handleRequestGps = () => {
-    setGpsLoading(true);
-    setGpsError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        localStorage.setItem("onboard_lat", lat.toString());
-        localStorage.setItem("onboard_lng", lng.toString());
-        
-        let detectedCity = "Madurai";
-        let detectedDistrict = "Madurai";
-        let detectedWard = "Ward 12";
-        let detectedArea = "KK Nagar";
-
-        if (Math.abs(lat - 9.92) > 0.3 || Math.abs(lng - 78.12) > 0.3) {
-          detectedCity = "Chennai";
-          detectedDistrict = "Chennai";
-          detectedWard = "Ward 45";
-          detectedArea = "Anna Nagar";
-        }
-
-        setWardNumber(detectedWard);
-        setAreaName(detectedArea);
-        setManualCity(detectedCity);
-        setManualDistrict(detectedDistrict);
-        
-        setGpsLoading(false);
-        setGpsDone(true);
-      },
-      (err) => {
-        setGpsLoading(false);
-        setGpsError("Location permission denied. Please enter manual details below.");
-      },
-      { timeout: 6000 }
     );
-  };
+  }
 
-  useEffect(() => {
-    if (step === 4 && role === "citizen" && !gpsDone && !gpsLoading) {
-      handleRequestGps();
-    }
-  }, [step, role]);
+
 
   // Step 4 — Ward / Constituency
   if (step === 4) return (
@@ -324,75 +586,188 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
           <div className="p-4 bg-secondary rounded-2xl border border-border">
             <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Your Full Name</p>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Enter your full name"
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
+              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-semibold" />
           </div>
 
-          {/* GPS Auto Detect status block */}
-          <div className="p-4 bg-secondary rounded-2xl border border-border flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Browser Location Detection</p>
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-xs font-semibold text-foreground">
-                {gpsDone ? "GPS Coordinates Captured" : gpsLoading ? "Requesting permission..." : "Requires GPS check"}
-              </span>
-              <button
-                onClick={handleRequestGps}
-                disabled={gpsLoading}
-                className="px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg active-press disabled:opacity-50">
-                {gpsLoading ? "Detecting..." : "Detect GPS"}
-              </button>
-            </div>
-            {gpsError && (
-              <p className="text-[10px] text-amber-600 mt-1 font-medium">{gpsError}</p>
-            )}
-            {gpsDone && (
-              <p className="text-[10px] text-green-600 mt-1 font-mono font-bold">
-                Lat: {localStorage.getItem("onboard_lat")?.slice(0, 7)} · Lng: {localStorage.getItem("onboard_lng")?.slice(0, 7)}
-              </p>
-            )}
-          </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-4 bg-secondary rounded-2xl border border-border">
-              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">City</p>
-              <input value={manualCity} onChange={e => setManualCity(e.target.value)} placeholder="e.g. Madurai"
-                className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
+          {/* Brief waiting indicator before browser shows permission dialog */}
+          {!gpsPermissionRequested && (
+            <div className="p-4 bg-secondary/60 rounded-2xl border border-border flex items-center gap-3 my-2 animate-fadeIn">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <MapPin size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-bold text-foreground">Requesting Location Access...</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Your browser will ask for permission</p>
+              </div>
+              <div className="w-4 h-4 rounded-full border-2 border-primary/40 border-t-primary animate-spin" />
             </div>
-            <div className="p-4 bg-secondary rounded-2xl border border-border">
-              <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">District</p>
-              <input value={manualDistrict} onChange={e => setManualDistrict(e.target.value)} placeholder="e.g. Madurai"
-                className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
-            </div>
-          </div>
+          )}
 
-          <div className="p-4 bg-secondary rounded-2xl border border-border">
-            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Ward Number</p>
-            <select value={wardNumber} onChange={e => setWardNumber(e.target.value)}
-              className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-medium">
-              <option value="" disabled className="bg-card text-muted-foreground">Select Ward Number</option>
-              {Array.from({ length: 100 }, (_, i) => `Ward ${i + 1}`).map(w => (
-                <option key={w} value={w} className="bg-card text-foreground">{w}</option>
-              ))}
-            </select>
-          </div>
-          
-          <div className="p-4 bg-secondary rounded-2xl border border-border">
-            <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Street / Area Name</p>
-            <input value={areaName} onChange={e => setAreaName(e.target.value)} placeholder="e.g. KK Nagar"
-              className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-medium" />
-          </div>
+          {/* GPS is auto-requested on step mount — show status tracker while in progress */}
+          {gpsPermissionRequested && gpsStatusStep !== "error" && (
+            <div className="p-5 bg-card rounded-2xl border border-border space-y-4 my-2 font-sans animate-fadeIn">
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider font-mono">Location Status Tracker</p>
+              <div className="space-y-3.5 pt-1">
+                {[
+                  { key: "requesting", label: "Detecting Location..." },
+                  { key: "granted", label: "Location Permission Granted" },
+                  { key: "captured", label: "GPS Coordinates Captured" },
+                  { key: "geocoding", label: "Reverse Geocoding (Nominatim API)" },
+                  { key: "verified", label: "Location Successfully Verified" }
+                ].map((stepItem, idx) => {
+                  const stepsOrder = ["requesting", "granted", "captured", "geocoding", "verified"];
+                  const currentIdx = stepsOrder.indexOf(gpsStatusStep);
+                  const itemIdx = stepsOrder.indexOf(stepItem.key);
+                  
+                  let stateColor = "text-muted-foreground/40";
+                  let dotBg = "bg-muted-foreground/20 text-muted-foreground/30";
+                  if (itemIdx === currentIdx) {
+                    stateColor = "text-primary font-bold";
+                    dotBg = "bg-primary animate-pulse text-white";
+                  } else if (itemIdx < currentIdx) {
+                    stateColor = "text-foreground font-semibold";
+                    dotBg = "bg-green-600 text-white";
+                  }
+
+                  return (
+                    <div key={stepItem.key} className="flex items-center gap-3 text-xs transition-all">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${dotBg}`}>
+                        {itemIdx < currentIdx ? "✓" : ""}
+                      </div>
+                      <span className={stateColor}>{stepItem.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {gpsStatusStep === "verified" && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-xl mt-3 animate-fadeIn">
+                  <p className="text-[10px] text-green-700 font-bold font-mono">
+                    RESOLVED: {manualCity}, {manualDistrict}
+                  </p>
+                  <p className="text-[9.5px] text-green-600 font-semibold mt-0.5">
+                    Area: {areaName || "Not Detected"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Conditional Ward Selection fallback if API could not resolve ward number */}
+          {gpsDone && gpsStatusStep === "verified" && !wardNumber && (
+            <div className="p-4 bg-yellow-50/50 border border-yellow-200 rounded-2xl space-y-2.5 animate-fadeIn">
+              <p className="text-xs text-yellow-800 font-semibold">We couldn't resolve your Ward automatically. Please select it:</p>
+              <select value={wardNumber} onChange={e => setWardNumber(e.target.value)}
+                className="w-full bg-transparent text-sm text-foreground outline-none border border-yellow-300 rounded-xl p-3 cursor-pointer font-medium bg-card">
+                <option value="" disabled>Select Ward Number</option>
+                {Array.from({ length: 100 }, (_, i) => `Ward ${i + 1}`).map(w => (
+                  <option key={w} value={w} className="bg-card text-foreground">{w}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Manual Input Fields - Shown only if permission denied or geocoding fails */}
+          {(gpsStatusStep === "error" || gpsError) && (
+            <div className="space-y-3 animate-fadeIn">
+              {/* Permission denied notice */}
+              <div className="p-4 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-3">
+                <MapPin size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-amber-800">
+                    {gpsError || "Location access denied."}
+                  </p>
+                  <p className="text-[10px] text-amber-700 mt-0.5">Please fill your area details below manually.</p>
+                </div>
+                <button onClick={handleRequestGps}
+                  className="text-[10px] font-bold text-primary bg-white border border-primary/30 px-2.5 py-1.5 rounded-lg active-press shrink-0">
+                  Retry
+                </button>
+              </div>
+              {/* ── Cascading India Location Picker ── */}
+              {/* 1. State */}
+              <div className="p-4 bg-secondary rounded-2xl border border-border">
+                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">State / UT</p>
+                <select value={manualState}
+                  onChange={e => { setManualState(e.target.value); setManualDistrict(""); setManualCity(""); }}
+                  className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-semibold">
+                  <option value="" disabled className="bg-card text-muted-foreground">Select State / UT</option>
+                  {INDIA_STATES.map(s => (
+                    <option key={s} value={s} className="bg-card text-foreground">{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. District — shown after state is selected */}
+              {manualState && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-4 bg-secondary rounded-2xl border border-border">
+                    <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">District</p>
+                    <select value={manualDistrict}
+                      onChange={e => { setManualDistrict(e.target.value); setManualCity(""); }}
+                      className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-semibold">
+                      <option value="" disabled className="bg-card text-muted-foreground">Select District</option>
+                      {getDistricts(manualState).map(d => (
+                        <option key={d} value={d} className="bg-card text-foreground">{d}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 3. City — shown after district is selected */}
+                  <div className="p-4 bg-secondary rounded-2xl border border-border">
+                    <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">City / Town</p>
+                    <select value={manualCity} onChange={e => setManualCity(e.target.value)}
+                      className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-semibold">
+                      <option value="" disabled className="bg-card text-muted-foreground">Select City</option>
+                      {getCities(manualState).map(c => (
+                        <option key={c} value={c} className="bg-card text-foreground">{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 bg-secondary rounded-2xl border border-border">
+                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Ward Number</p>
+                <select value={wardNumber} onChange={e => setWardNumber(e.target.value)}
+                  className="w-full bg-transparent text-sm text-foreground outline-none border-none cursor-pointer font-semibold bg-secondary">
+                  <option value="" disabled className="bg-card text-muted-foreground">Select Ward Number</option>
+                  {Array.from({ length: 100 }, (_, i) => `Ward ${i + 1}`).map(w => (
+                    <option key={w} value={w} className="bg-card text-foreground">{w}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="p-4 bg-secondary rounded-2xl border border-border">
+                <p className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Street / Area Name</p>
+                <input value={areaName} onChange={e => setAreaName(e.target.value)} placeholder="e.g. KK Nagar"
+                  className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none font-semibold" />
+              </div>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2.5 flex-1 flex flex-col min-h-0">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1">Select Constituency</p>
-          {["Madurai Central", "Madurai North", "Theni", "Virudhunagar", "Dindigul"].map(c => (
-            <button key={c} onClick={() => setWard(c)}
-              className={`w-full p-4 rounded-2xl border-2 text-left text-sm font-semibold transition-all ${ward === c ? "border-primary bg-secondary text-primary" : "border-border bg-card text-foreground"}`}>
-              {c}
-            </button>
-          ))}
-          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl">
-            <p className="text-xs text-blue-700 font-medium flex items-center gap-1.5">
-              <CheckCircle size={12} /> Cross-verified with Lok Sabha public records
+          <div className="p-3 bg-secondary rounded-2xl border border-border flex items-center gap-2 mb-2 shrink-0">
+            <Search size={16} className="text-muted-foreground shrink-0" />
+            <input value={constituencySearch} onChange={e => setConstituencySearch(e.target.value)} placeholder="Search constituency..."
+              className="w-full bg-transparent text-sm text-foreground outline-none font-semibold placeholder:text-muted-foreground" />
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-2 max-h-[220px] border border-border/65 rounded-2xl p-2 bg-secondary/10 scrollbar-none shrink-0">
+            {filteredConstituencies.map(c => (
+              <button key={c} onClick={() => setWard(c)}
+                className={`w-full p-3.5 rounded-xl border text-left text-sm font-semibold transition-all ${ward === c ? "border-primary bg-secondary text-primary" : "border-border bg-card text-foreground hover:border-muted-foreground/30"}`}>
+                {c}
+              </button>
+            ))}
+            {filteredConstituencies.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4">No constituencies match your search.</p>
+            )}
+          </div>
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl mt-3 shrink-0">
+            <p className="text-xs text-blue-700 font-semibold flex items-center gap-1.5">
+              <CheckCircle size={12} className="shrink-0" /> Cross-verified with Lok Sabha public records
             </p>
           </div>
         </div>
@@ -412,7 +787,7 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
       </div>
       <div>
         <div className="flex items-center justify-center gap-2.5 mb-3">
-          <div className="w-8 h-8 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-1 shrink-0">
+          <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-0.5 shrink-0">
             <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
           <span className="text-xs font-bold text-primary uppercase tracking-wider">{import.meta.env.VITE_APP_NAME || "JanVaani"}</span>
@@ -436,17 +811,18 @@ function Onboard({ onDone }: { onDone: (role: "citizen" | "mp") => void }) {
 // ════════════════════════════════════════════════════════════════════
 // CITIZEN SCREENS
 // ════════════════════════════════════════════════════════════════════
+
 function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: CitizenTab) => void; onBellClick: () => void; unreadCount: number }) {
   const userName = localStorage.getItem("onboard_name") || "Priya Sharma";
   const userWard = localStorage.getItem("onboard_ward") || "KK Nagar, Ward 14";
   const userLocation = userWard.toLowerCase().includes("madurai") ? userWard : `${userWard}, Madurai`;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto scrollbar-none">
+    <div id="tour-home-dashboard" className="flex flex-col h-full overflow-y-auto scrollbar-none">
       <div className="pt-6 pb-4 px-5">
-        <div className="flex items-center justify-between">
+        <div id="tour-welcome-header" className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-1.5 shrink-0">
+            <div className="w-12 h-12 rounded-full bg-white shadow-md border border-slate-100 flex items-center justify-center overflow-hidden p-0.5 shrink-0">
               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <div>
@@ -454,7 +830,7 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
               <h1 className="text-sm font-bold text-foreground mt-1 leading-none" style={DF}>{userName}</h1>
             </div>
           </div>
-          <button onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
+          <button id="tour-bell-btn" onClick={onBellClick} className="relative w-10 h-10 rounded-full bg-secondary flex items-center justify-center active-press">
             <Bell size={19} className="text-foreground" />
             {unreadCount > 0 && (
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-card flex items-center justify-center text-[7.5px] text-white font-bold" />
@@ -469,7 +845,7 @@ function CitizenHome({ setTab, onBellClick, unreadCount }: { setTab: (t: Citizen
 
       {/* Primary Action */}
       <div className="px-5 mb-3">
-        <button onClick={() => setTab("report")}
+        <button id="tour-report-btn" onClick={() => setTab("report")}
           className="w-full py-[18px] bg-primary text-white rounded-[18px] text-base font-bold flex items-center justify-center gap-3 active-press"
           style={{ ...DF, boxShadow: "0 8px 24px rgba(22,101,52,0.28)" }}>
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -566,9 +942,11 @@ function CitizenComplaints({ onSelect, setTab }: { onSelect: (c: Complaint) => v
   );
 }
 
-function CitizenProfile({ onLogout, onBack, onSelect, setTab }: { onLogout: () => void; onBack: () => void; onSelect: (c: Complaint) => void; setTab: (t: CitizenTab) => void }) {
+function CitizenProfile({ onLogout, onBack, onSelect, setTab, onStartTour }: { onLogout: () => void; onBack: () => void; onSelect: (c: Complaint) => void; setTab: (t: CitizenTab) => void; onStartTour: () => void }) {
   const [photoUrl, setPhotoUrl] = useState<string>(() => localStorage.getItem("citizen_dp") || "");
   const [activeListType, setActiveListType] = useState<null | "filed" | "joined">(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [locStatus, setLocStatus] = useState(() => localStorage.getItem("location_permission_preference") || "GRANTED");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const userName = localStorage.getItem("onboard_name") || "Priya Sharma";
@@ -658,10 +1036,66 @@ function CitizenProfile({ onLogout, onBack, onSelect, setTab }: { onLogout: () =
           </button>
         </div>
 
+        <div className="p-4 bg-card rounded-2xl border border-border shadow-sm">
+          <button onClick={() => setShowSettings(true)} className="w-full flex items-center gap-3 py-3 active-press">
+            <span className="text-muted-foreground"><FileText size={15} /></span>
+            <span className="text-sm text-foreground font-semibold">Settings</span>
+            <ChevronRight size={14} className="ml-auto text-muted-foreground" />
+          </button>
+        </div>
+
         <button onClick={onLogout} className="w-full py-3.5 bg-red-50 text-red-600 rounded-2xl font-semibold text-sm border border-red-100">
           Logout
         </button>
       </div>
+
+      {/* Citizen Settings Overlay Drawer */}
+      {showSettings && (
+        <div className="absolute inset-0 bg-black/60 z-50 flex flex-col justify-end animate-fadeIn font-sans">
+          <div className="absolute inset-0" onClick={() => setShowSettings(false)} />
+          <div className="relative bg-card rounded-t-[32px] max-h-[85%] flex flex-col z-10 shadow-2xl border-t border-border animate-slideUp">
+            <div className="shrink-0 p-5 border-b border-border flex items-center justify-between">
+              <h3 className="text-base font-bold text-foreground">Settings</h3>
+              <button onClick={() => setShowSettings(false)} className="text-xs font-bold text-primary bg-secondary px-3 py-1.5 rounded-full active-press">
+                Close
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-5 space-y-3.5 scrollbar-none bg-secondary/15">
+              {/* Geolocation Permissions toggle option */}
+              <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Location Permissions</p>
+                  <p className="text-[10px] text-muted-foreground">GPS tracking authorization status</p>
+                </div>
+                <select
+                  value={locStatus}
+                  onChange={e => {
+                    const next = e.target.value;
+                    setLocStatus(next);
+                    localStorage.setItem("location_permission_preference", next);
+                  }}
+                  className={`text-xs font-bold border-none outline-none py-1.5 px-3 rounded-lg cursor-pointer ${locStatus === "GRANTED" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}
+                >
+                  <option value="GRANTED" className="bg-card text-green-700">Granted</option>
+                  <option value="DENIED" className="bg-card text-red-700">Denied</option>
+                </select>
+              </div>
+
+              {/* Interactive App Tour Replay */}
+              <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Interactive App Tour</p>
+                  <p className="text-[10px] text-muted-foreground">Replay the guided dashboard walkthrough</p>
+                </div>
+                <button onClick={() => { setShowSettings(false); onStartTour(); }} className="px-3.5 py-2 bg-primary text-white text-xs font-bold rounded-xl active-press shadow-sm">
+                  Start Tour
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Drawer Overlay for Filed/Joined complaints */}
       {activeListType && (
@@ -740,6 +1174,11 @@ function MPDashboard({
   const [activeChartTab, setActiveChartTab] = useState<"categories" | "wards" | "trends">("categories");
   const [hoveredData, setHoveredData] = useState<any | null>(null);
   const [currentTime, setCurrentTime] = useState("");
+  
+  // Drill-down states
+  const [selectedAlert, setSelectedAlert] = useState<any | null>(null);
+  const [selectedChartDetail, setSelectedChartDetail] = useState<any | null>(null);
+  const [showDrillDownReports, setShowDrillDownReports] = useState<{ title: string; category: string; ward: string } | null>(null);
 
   useEffect(() => {
     const updateTime = () => {
@@ -799,19 +1238,64 @@ function MPDashboard({
     wardCounts[r.ward] = (wardCounts[r.ward] || 0) + 1;
   });
 
-  // AI Alerts triggered only when statistical thresholds are genuinely crossed
-  const alerts: string[] = [];
-  const waterWard12 = allReports.filter(r => r.category === "water" && r.ward === "Ward 12").length;
-  if (waterWard12 >= 1) {
-    alerts.push(`Water reports increased 32% in Ward 12 during the last 24 hours.`);
+  // Alert detailed structures
+  const alertData = [
+    {
+      id: "alert_water",
+      title: "Water Reports Increased 32%",
+      text: "Water reports increased 32% in Ward 12 during the last 24 hours.",
+      reason: "AI detected a sudden cluster of water supply complaints within Ward 12, likely due to a major pipeline burst or pressure failure in MG Road.",
+      ward: "Ward 12",
+      category: "water",
+      reportsCount: 137,
+      growth: "Up 32% compared to yesterday",
+      impact: "Estimated 4,800 residents affected (Critical)",
+      confidence: "96%",
+      timePeriod: "Last 24 Hours",
+      trendPoints: [80, 92, 88, 105, 137]
+    },
+    {
+      id: "alert_drainage",
+      title: "Drainage Reports Rising Continuously",
+      text: "Drainage reports rising continuously for three days.",
+      reason: "AI identified a continuous, daily accumulation of sewage and blockages across multiple blocks in Ward 8 and Ward 11, indicating central storm drainage grid overload.",
+      ward: "Ward 8, Ward 11",
+      category: "drainage",
+      reportsCount: 86,
+      growth: "Up 18% daily over the last 3 days",
+      impact: "Estimated 3,420 residents affected (High)",
+      confidence: "93%",
+      timePeriod: "Last 3 Days",
+      trendPoints: [45, 58, 72, 86]
+    },
+    {
+      id: "alert_healthcare",
+      title: "Healthcare Reports Concentrated",
+      text: "Healthcare reports concentrated around PHC Zone 2.",
+      reason: "AI recognized a high spatial concentration of healthcare service grievances around Public Health Center Zone 2 (Ward 14), suggesting supply or staffing deficits.",
+      ward: "Ward 14",
+      category: "healthcare",
+      reportsCount: 32,
+      growth: "Up 25% compared to the weekly average",
+      impact: "Estimated 1,200 residents affected (Medium)",
+      confidence: "91%",
+      timePeriod: "Last 7 Days",
+      trendPoints: [12, 18, 20, 26, 32]
+    }
+  ];
+
+  const alerts = [];
+  const waterWard12Count = allReports.filter(r => r.category === "water" && r.ward === "Ward 12").length;
+  if (waterWard12Count >= 1) {
+    alerts.push(alertData[0]);
   }
-  const drainageCount = allReports.filter(r => r.category === "drainage").length;
-  if (drainageCount >= 1) {
-    alerts.push(`Drainage reports rising continuously for three days.`);
+  const drainageCountVal = allReports.filter(r => r.category === "drainage").length;
+  if (drainageCountVal >= 1) {
+    alerts.push(alertData[1]);
   }
-  const healthcareCount = allReports.filter(r => r.category === "healthcare").length;
-  if (healthcareCount >= 1) {
-    alerts.push(`Healthcare reports concentrated around PHC Zone 2.`);
+  const healthcareCountVal = allReports.filter(r => r.category === "healthcare").length;
+  if (healthcareCountVal >= 1) {
+    alerts.push(alertData[2]);
   }
 
   return (
@@ -821,7 +1305,7 @@ function MPDashboard({
         <div className="flex items-center justify-between">
           {/* Logo & Name on Left - No Back Button */}
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-0.5 shrink-0">
+            <div className="w-10 h-10 rounded-full bg-white shadow-sm border border-slate-100 flex items-center justify-center overflow-hidden p-0.5 shrink-0">
               <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
             <span className="text-base font-black text-foreground font-sans tracking-tight">JanVaani</span>
@@ -829,7 +1313,7 @@ function MPDashboard({
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-3">
-            <button onClick={onBellClick} className="relative w-8 h-8 rounded-xl bg-secondary border border-border flex items-center justify-center active-press">
+            <button id="tour-mp-bell-btn" onClick={onBellClick} className="relative w-8 h-8 rounded-xl bg-secondary border border-border flex items-center justify-center active-press">
               <Bell size={16} className="text-foreground" />
               {unreadCount > 0 && (
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full" />
@@ -850,7 +1334,7 @@ function MPDashboard({
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-3 font-sans">
+        <div id="tour-mp-summary" className="grid grid-cols-2 gap-3 font-sans">
           {/* Active Community Reports Card */}
           <button
             onClick={() => { setPrioritySeverity("all"); setTab("priority"); }}
@@ -875,7 +1359,7 @@ function MPDashboard({
             className="flex-1 bg-card border border-red-200/60 rounded-2xl p-4 text-left shadow-sm active-press hover:border-red-300 transition-all flex flex-col justify-between min-h-[105px]">
             <div className="flex justify-between items-start w-full">
               <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Critical Reports</span>
-              <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100">
+              <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center text-red-650 border border-red-100">
                 <AlertTriangle size={15} />
               </div>
             </div>
@@ -891,20 +1375,24 @@ function MPDashboard({
         {/* AI Alerts based on statistical thresholds */}
         {alerts.length > 0 && (
           <div className="space-y-2" data-tour="mp-ai-alert font-sans">
-            {alerts.map((alertText, idx) => (
-              <div key={idx} className="p-3.5 bg-red-50/50 border border-red-200 rounded-2xl flex items-start gap-2.5">
-                <AlertTriangle size={15} className="text-red-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-[9px] font-bold text-red-800 uppercase tracking-wider font-mono">System Anomaly Alert</p>
-                  <p className="text-xs text-red-950 font-semibold leading-relaxed mt-0.5">{alertText}</p>
+            {alerts.map((alert, idx) => (
+              <button key={idx} onClick={() => setSelectedAlert(alert)}
+                className="w-full text-left p-3.5 bg-red-50/50 border border-red-200 rounded-2xl flex items-start gap-2.5 active-press hover:border-red-300 transition-all shadow-sm animate-fadeIn">
+                <AlertTriangle size={15} className="text-red-650 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <div className="flex justify-between items-center">
+                    <p className="text-[9px] font-bold text-red-800 uppercase tracking-wider font-mono">System Anomaly Alert</p>
+                    <span className="text-[8px] bg-red-100 text-red-750 px-1.5 py-0.5 rounded font-bold font-mono">INSPECT ALERT</span>
+                  </div>
+                  <p className="text-xs text-red-950 font-bold leading-relaxed mt-0.5">{alert.text}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
 
         {/* Priority list */}
-        <div data-tour="mp-priority-list font-sans">
+        <div id="tour-mp-priority" data-tour="mp-priority-list font-sans">
           <div className="flex items-center gap-2 mb-3">
             <p className="text-xs font-bold text-foreground uppercase tracking-wider font-mono">Top Priority Issues</p>
           </div>
@@ -912,9 +1400,10 @@ function MPDashboard({
             {priorityList.map((c, i) => {
               const full = complaintService.getById(c.id);
               if (!full) return null;
+              const dynamicScore = calculateDynamicImpactScore(full).total;
               return (
                 <button key={c.id} onClick={() => full && onComplaintSelect(full)}
-                  className="w-full bg-card rounded-2xl border border-border p-4 text-left active-press transition-all hover:border-primary/25 shadow-sm block font-sans">
+                  className="w-full bg-card rounded-2xl border border-border p-4 text-left active-press transition-all hover:border-primary/25 shadow-sm block font-sans animate-fadeIn">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
@@ -930,7 +1419,7 @@ function MPDashboard({
                       <p className="text-[10px] text-muted-foreground mt-0.5">{c.ward} · {c.citizensJoined + 1} joined</p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="text-sm font-black text-primary font-mono">{c.impactScore}</p>
+                      <p className="text-sm font-black text-primary font-mono">{dynamicScore}</p>
                       <p className="text-[9px] text-muted-foreground mt-0.5">impact score</p>
                     </div>
                   </div>
@@ -941,7 +1430,7 @@ function MPDashboard({
         </div>
 
         {/* Constituency Analytics Section */}
-        <div className="p-4 bg-card rounded-2xl border border-border cursor-pointer hover:border-primary/25 transition-all font-sans"
+        <div id="tour-mp-analytics" className="p-4 bg-card rounded-2xl border border-border cursor-pointer hover:border-primary/25 transition-all font-sans"
           onClick={() => setShowHealthModal(true)}
           data-tour="mp-health-scores">
           <p className="text-xs font-bold text-foreground uppercase tracking-wider mb-3.5 font-mono">Constituency Analytics & Health Summary</p>
@@ -984,8 +1473,8 @@ function MPDashboard({
           </div>
 
           {/* Interactive Chart Display Area */}
-          <div className="relative p-3.5 border border-border/80 rounded-2xl bg-secondary/10 mb-4 shrink-0 font-sans" onClick={(e) => e.stopPropagation()}>
-            {activeChartTab === "categories" && (() => {
+          <div className="relative mt-4 mb-2 shrink-0 font-sans select-none" onClick={(e) => e.stopPropagation()}>
+            {(() => {
               const barChartData = categoriesList.map((cat, i) => {
                 const count = categoryCounts[cat] || 0;
                 const percentage = allReports.length > 0 ? Math.round((count / allReports.length) * 100) : 0;
@@ -1006,169 +1495,104 @@ function MPDashboard({
                   percentage,
                   growth: count > 3 ? "+12%" : "+4%",
                   trend: count > 5 ? "RISING" : "STABLE",
-                  color: ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#ec4899", "#14b8a6", "#8b5cf6", "#64748b"][i % 9]
+                  color: ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed", "#ec4899", "#14b8a6", "#8b5cf6", "#64748b"][i % 9],
+                  type: "category" as const
                 };
               }).filter(d => d.count > 0 || ["Water", "Sanitation", "Roads", "Electricity", "Drainage"].includes(d.label));
 
-              return (
-                <div className="flex flex-col items-center">
-                  <svg width="320" height="210" className="overflow-visible font-sans text-[10.5px]">
-                    {/* Grid lines */}
-                    <line x1="75" y1="15" x2="300" y2="15" stroke="var(--border)" strokeDasharray="2" />
-                    <line x1="75" y1="75" x2="300" y2="75" stroke="var(--border)" strokeDasharray="2" />
-                    <line x1="75" y1="135" x2="300" y2="135" stroke="var(--border)" strokeDasharray="2" />
-                    <line x1="75" y1="195" x2="300" y2="195" stroke="var(--border)" strokeDasharray="2" />
-                    
-                    {barChartData.map((d, i) => {
-                      const barWidth = Math.max(5, Math.min(200, d.percentage * 2.8));
-                      const y = 15 + i * 21;
-                      return (
-                        <g key={d.label}
-                          className="cursor-pointer group"
-                          onMouseEnter={() => setHoveredData({ ...d, type: "category" })}
-                          onMouseLeave={() => setHoveredData(null)}>
-                          <text x="5" y={y + 11} className="fill-foreground font-bold">{d.label}</text>
-                          <rect x="80" y={y + 2} width={barWidth} height="12" rx="3" fill={d.color} className="transition-all hover:opacity-85" />
-                          <text x={85 + barWidth} y={y + 11} className="fill-muted-foreground font-mono font-bold text-[9.5px]">{d.count}</text>
-                        </g>
-                      );
-                    })}
-                  </svg>
-                  <p className="text-[10px] text-muted-foreground mt-2 text-center font-medium font-sans">Hover or tap bars for deep auditing metrics</p>
-                </div>
-              );
-            })()}
-
-            {activeChartTab === "wards" && (() => {
-              let cumulativePercent = 0;
-              const donutData = Object.keys(WARD_GEOMETRIES).slice(0, 5).map((ward, i) => {
+              const wardData = Object.keys(WARD_GEOMETRIES).slice(0, 5).map((ward, i) => {
                 const count = wardCounts[ward] || 0;
-                const percentage = allReports.length > 0 ? (count / allReports.length) : 0;
-                const startAngle = cumulativePercent * 360;
-                cumulativePercent += percentage;
-                const endAngle = cumulativePercent * 360;
-                
-                const getCoordinatesForPercent = (percent: number) => {
-                  const x = Math.cos(2 * Math.PI * percent - Math.PI / 2);
-                  const y = Math.sin(2 * Math.PI * percent - Math.PI / 2);
-                  return [x, y];
-                };
-                
-                const [startX, startY] = getCoordinatesForPercent(startAngle / 360);
-                const [endX, endY] = getCoordinatesForPercent(endAngle / 360);
-                
-                const largeArcFlag = percentage > 0.5 ? 1 : 0;
-                const r = 50;
-                const cx = 70;
-                const cy = 80;
-                
-                const pathData = percentage === 1 
-                  ? `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`
-                  : percentage === 0 
-                  ? ""
-                  : `M ${cx + startX * r} ${cy + startY * r} A ${r} ${r} 0 ${largeArcFlag} 1 ${cx + endX * r} ${cy + endY * r} L ${cx} ${cy} Z`;
-
+                const percentage = allReports.length > 0 ? Math.round((count / allReports.length) * 100) : 0;
                 return {
                   label: ward,
                   count,
-                  percentage: Math.round(percentage * 100),
-                  pathData,
+                  percentage,
                   color: ["#2563eb", "#059669", "#d97706", "#dc2626", "#7c3aed"][i % 5],
                   growth: count > 2 ? "+18%" : "+6%",
-                  trend: count > 3 ? "HIGH TREND" : "STABLE"
+                  trend: count > 3 ? "HIGH TREND" : "STABLE",
+                  type: "ward" as const
                 };
               });
 
+              const trendData = [
+                { label: "Jan", count: 8, percentage: 10, color: "#16a34a", growth: "Baseline", trend: "STABLE", type: "trend" as const },
+                { label: "Feb", count: 14, percentage: 17, color: "#16a34a", growth: "+75%", trend: "STABLE", type: "trend" as const },
+                { label: "Mar", count: 24, percentage: 29, color: "#16a34a", growth: "+71%", trend: "RISING", type: "trend" as const },
+                { label: "Apr", count: 18, percentage: 22, color: "#16a34a", growth: "-25%", trend: "STABLE", type: "trend" as const },
+                { label: "May", count: 32, percentage: 39, color: "#16a34a", growth: "+78%", trend: "SPARK", type: "trend" as const },
+              ];
+
+              let chartItems: {
+                label: string;
+                count: number;
+                percentage: number;
+                color: string;
+                growth: string;
+                trend: string;
+                type: "category" | "ward" | "trend";
+              }[] = [];
+
+              if (activeChartTab === "categories") {
+                chartItems = barChartData;
+              } else if (activeChartTab === "wards") {
+                chartItems = wardData;
+              } else {
+                chartItems = trendData;
+              }
+
               return (
-                <div className="flex items-center gap-3 py-1">
-                  <svg width="130" height="150" className="overflow-visible shrink-0">
-                    {donutData.map((d, i) => d.pathData && (
-                      <path key={d.label} d={d.pathData} fill={d.color} className="cursor-pointer transition-all hover:opacity-85"
-                        onMouseEnter={() => setHoveredData({ ...d, type: "ward" })}
-                        onMouseLeave={() => setHoveredData(null)} />
-                    ))}
-                    <circle cx="70" cy="80" r="28" fill="var(--card)" />
-                  </svg>
-                  <div className="flex-1 space-y-1.5 font-sans text-[11px] leading-tight">
-                    {donutData.map(d => (
-                      <div key={d.label} className="flex items-center gap-1.5 text-foreground font-semibold">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
-                        <span className="truncate">{d.label}: {d.count} ({d.percentage}%)</span>
+                <div className="w-full relative px-2">
+                  {/* Perfect Dotted Grid Lines in the Background */}
+                  <div className="absolute inset-0 flex pointer-events-none">
+                    <div className="w-24 shrink-0" />
+                    <div className="flex-1 flex justify-between relative h-full">
+                      <div className="absolute inset-y-0 left-0 border-l border-dashed border-border/80" />
+                      <div className="absolute inset-y-0 left-1/4 border-l border-dashed border-border/80" />
+                      <div className="absolute inset-y-0 left-2/4 border-l border-dashed border-border/80" />
+                      <div className="absolute inset-y-0 left-3/4 border-l border-dashed border-border/80" />
+                      <div className="absolute inset-y-0 right-0 border-r border-dashed border-border/80" />
+                    </div>
+                    <div className="w-20 shrink-0" />
+                  </div>
+
+                  {/* Chart Rows */}
+                  <div className="relative z-10 space-y-3.5">
+                    {chartItems.map((item) => (
+                      <div
+                        key={item.label}
+                        onClick={() => setSelectedChartDetail(item)}
+                        className="flex items-center group cursor-pointer"
+                      >
+                        {/* Category Label Column (vertically centered, never touches border) */}
+                        <div className="w-24 text-[11px] font-bold text-foreground truncate pr-3" style={DF}>
+                          {item.label}
+                        </div>
+
+                        {/* Bar Column (shares the same X position, aligns perfectly with background grid) */}
+                        <div className="flex-1 h-3 flex items-center bg-secondary/20 rounded-full relative">
+                          <div
+                            className="h-full rounded-full transition-all duration-500 ease-out"
+                            style={{
+                              width: `${Math.max(4, item.percentage)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+
+                        {/* Numeric Column (perfectly aligned right margin) */}
+                        <div className="w-20 text-right text-[11px] font-bold text-foreground font-mono pl-3">
+                          {item.count} <span className="text-[9px] text-muted-foreground font-semibold">({item.percentage}%)</span>
+                        </div>
                       </div>
                     ))}
                   </div>
+
+                  <p className="text-[10px] text-muted-foreground mt-4 text-center font-bold font-sans">
+                    Tap rows for deep auditing metrics
+                  </p>
                 </div>
               );
             })()}
-
-            {activeChartTab === "trends" && (() => {
-              const trendPoints = [
-                { x: 30, y: 130, label: "Jan", count: 8, growth: "Baseline", percentage: "10%", trend: "STABLE" },
-                { x: 95, y: 110, label: "Feb", count: 14, growth: "+75%", percentage: "17%", trend: "STABLE" },
-                { x: 160, y: 70, label: "Mar", count: 24, growth: "+71%", percentage: "29%", trend: "RISING" },
-                { x: 225, y: 85, label: "Apr", count: 18, growth: "-25%", percentage: "22%", trend: "STABLE" },
-                { x: 290, y: 40, label: "May", count: 32, growth: "+78%", percentage: "39%", trend: "SPARK" },
-              ];
-
-              const linePath = `M ${trendPoints.map(p => `${p.x} ${p.y}`).join(" L ")}`;
-              const areaPath = `${linePath} L 290 150 L 30 150 Z`;
-
-              return (
-                <div className="flex flex-col items-center">
-                  <svg width="320" height="170" className="overflow-visible font-mono text-[10px]">
-                    <line x1="20" y1="150" x2="310" y2="150" stroke="var(--border)" strokeWidth="1.5" />
-                    <line x1="20" y1="20" x2="20" y2="150" stroke="var(--border)" strokeWidth="1.5" />
-                    
-                    {/* Area fill */}
-                    <path d={areaPath} fill="url(#trend-grad)" className="opacity-15" />
-                    {/* Line path */}
-                    <path d={linePath} fill="none" stroke="var(--primary)" strokeWidth="2.5" />
-                    
-                    {/* Points */}
-                    {trendPoints.map((p, i) => (
-                      <g key={i} className="cursor-pointer animate-fadeIn"
-                        onMouseEnter={() => setHoveredData({ ...p, type: "trend" })}
-                        onMouseLeave={() => setHoveredData(null)}>
-                        <circle cx={p.x} cy={p.y} r="6" fill="var(--primary)" stroke="var(--card)" strokeWidth="2" />
-                        <text x={p.x - 10} y="165" className="fill-muted-foreground font-bold">{p.label}</text>
-                      </g>
-                    ))}
-
-                    <defs>
-                      <linearGradient id="trend-grad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="var(--primary)" />
-                        <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-              );
-            })()}
-
-            {/* Absolute Dynamic Tooltip Overlay */}
-            {hoveredData && (
-              <div className="absolute top-2.5 right-2.5 bg-slate-950 text-white p-3 rounded-2xl border border-slate-800 shadow-xl text-[10.5px] leading-relaxed w-[160px] z-30 animate-fadeIn font-sans">
-                <p className="font-extrabold text-primary capitalize leading-none mb-1.5">{hoveredData.label}</p>
-                <div className="border-t border-slate-800/80 pt-1.5 space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Report Count:</span>
-                    <strong className="text-white">{hoveredData.count}</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Percentage:</span>
-                    <strong className="text-white">{hoveredData.percentage}%</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Growth Rate:</span>
-                    <strong className="text-green-400 font-mono">{hoveredData.growth}</strong>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Trend Status:</span>
-                    <strong className="text-primary font-mono text-[9px] uppercase">{hoveredData.trend}</strong>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1307,6 +1731,244 @@ function MPDashboard({
           </div>
         );
       })()}
+
+      {/* Alert Details Modal */}
+      {selectedAlert && (() => {
+        const related = allReports.filter(r => r.category === selectedAlert.category && r.ward === selectedAlert.ward).slice(0, 2);
+        
+        // Inline trend graph drawer
+        const alertTrendGraph = (points: number[]) => {
+          const width = 280;
+          const height = 80;
+          const padding = 15;
+          const maxVal = Math.max(...points);
+          const minVal = Math.min(...points);
+          const range = maxVal - minVal || 1;
+          
+          const coords = points.map((p, idx) => {
+            const x = padding + (idx * (width - padding * 2)) / (points.length - 1);
+            const y = height - padding - ((p - minVal) / range) * (height - padding * 2);
+            return { x, y, val: p };
+          });
+
+          const linePath = `M ${coords.map(c => `${c.x} ${c.y}`).join(" L ")}`;
+          return (
+            <svg width={width} height={height} className="overflow-visible font-mono text-[9px] mt-2">
+              <path d={linePath} fill="none" stroke="var(--primary)" strokeWidth="2" />
+              {coords.map((c, i) => (
+                <g key={i}>
+                  <circle cx={c.x} cy={c.y} r="4" fill="var(--primary)" />
+                  <text x={c.x - 6} y={c.y - 6} className="fill-foreground font-bold">{c.val}</text>
+                </g>
+              ))}
+            </svg>
+          );
+        };
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-5 font-sans animate-fadeIn">
+            <div className="bg-card w-full max-w-sm rounded-2xl border border-border p-6 shadow-2xl relative animate-slideUp flex flex-col max-h-[85vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-3 border-b border-border/80 shrink-0">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Alert Details</h3>
+                  <p className="text-[10px] text-red-650 font-bold uppercase tracking-wider font-mono mt-0.5">Critical Anomaly Alert</p>
+                </div>
+                <button
+                  onClick={() => setSelectedAlert(null)}
+                  className="text-xs px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-bold rounded-lg transition-colors">
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4 text-xs font-sans">
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Alert Subject</p>
+                  <p className="font-extrabold text-foreground text-sm mt-0.5">{selectedAlert.title}</p>
+                </div>
+
+                <div className="p-3 bg-red-50/40 border border-red-100 rounded-xl">
+                  <p className="text-[9px] text-red-850 font-bold uppercase tracking-wider font-mono">AI Generation Rationale</p>
+                  <p className="font-medium text-red-950 mt-1 leading-relaxed">{selectedAlert.reason}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5 border-t border-b border-border/60 py-3 font-mono">
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Affected Wards</p>
+                    <p className="font-black text-foreground mt-0.5">{selectedAlert.ward}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Reports Received</p>
+                    <p className="font-black text-foreground mt-0.5">{selectedAlert.reportsCount} Reports</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Impact level</p>
+                    <p className="font-black text-red-600 mt-0.5">{selectedAlert.impact.split(" ")[1] || "High"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">AI Confidence</p>
+                    <p className="font-black text-primary mt-0.5">{selectedAlert.confidence}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Time Period Analysed</p>
+                  <p className="font-extrabold text-foreground mt-0.5">{selectedAlert.timePeriod}</p>
+                </div>
+
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">24h Trend Graph</p>
+                  <div className="bg-secondary/40 rounded-xl p-3 flex justify-center">
+                    {alertTrendGraph(selectedAlert.trendPoints)}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Top Contributing Reports</p>
+                  <div className="space-y-1.5">
+                    {related.map(r => {
+                      const full = complaintService.getById(r.id);
+                      return (
+                        <button key={r.id} onClick={() => { if (full) onComplaintSelect(full); setSelectedAlert(null); }}
+                          className="w-full text-left p-2.5 bg-secondary/45 hover:bg-secondary border border-border/50 rounded-xl text-[11.5px] font-bold text-foreground flex justify-between items-center transition-colors">
+                          <span className="truncate pr-2">{r.title}</span>
+                          <span className="shrink-0 text-primary font-mono text-[10px] font-black">{r.impactScore} pts</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowDrillDownReports({
+                      title: `Related Reports: ${selectedAlert.title}`,
+                      category: selectedAlert.category,
+                      ward: selectedAlert.ward.includes(",") ? "all" : selectedAlert.ward
+                    });
+                    setSelectedAlert(null);
+                  }}
+                  className="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold active-press text-center shadow-sm">
+                  View All Related Reports
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Analytics Deep-Dive Chart Modal */}
+      {selectedChartDetail && (() => {
+        let sortedWards = "N/A";
+        let sortedCats = "N/A";
+        if (selectedChartDetail.type === "category") {
+          const wardCountForCat: Record<string, number> = {};
+          allReports.filter(r => r.category === selectedChartDetail.label.toLowerCase() || r.category === selectedChartDetail.label).forEach(r => {
+            wardCountForCat[r.ward] = (wardCountForCat[r.ward] || 0) + 1;
+          });
+          sortedWards = Object.entries(wardCountForCat)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([w, c]) => `${w} (${c})`)
+            .join(", ") || "No active reports";
+        } else if (selectedChartDetail.type === "ward") {
+          const catCountForWard: Record<string, number> = {};
+          allReports.filter(r => r.ward === selectedChartDetail.label).forEach(r => {
+            catCountForWard[r.category] = (catCountForWard[r.category] || 0) + 1;
+          });
+          sortedCats = Object.entries(catCountForWard)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([c, count]) => `${c.charAt(0).toUpperCase() + c.slice(1)} (${count})`)
+            .join(", ") || "No active reports";
+        }
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-5 font-sans animate-fadeIn">
+            <div className="bg-card w-full max-w-sm rounded-2xl border border-border p-6 shadow-2xl relative animate-slideUp flex flex-col max-h-[75vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-3 border-b border-border/80 shrink-0">
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Analytics Deep-Dive</h3>
+                  <p className="text-[10px] text-primary font-bold uppercase tracking-wider font-mono mt-0.5">Real-Time Auditing Module</p>
+                </div>
+                <button
+                  onClick={() => setSelectedChartDetail(null)}
+                  className="text-xs px-2.5 py-1.5 bg-secondary hover:bg-secondary/80 text-foreground font-bold rounded-lg transition-colors">
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-4 text-xs font-sans">
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Entity Name</p>
+                  <p className="font-extrabold text-foreground text-sm mt-0.5">{selectedChartDetail.label}</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3.5 border-t border-b border-border/60 py-3 font-mono">
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Report Count</p>
+                    <p className="font-black text-foreground mt-0.5">{selectedChartDetail.count} active items</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Percentage Share</p>
+                    <p className="font-black text-foreground mt-0.5">{selectedChartDetail.percentage}%</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Trend growth</p>
+                    <p className="font-black text-green-600 mt-0.5">{selectedChartDetail.growth}</p>
+                  </div>
+                  <div>
+                    <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider">Status</p>
+                    <p className="font-black text-primary mt-0.5">{selectedChartDetail.trend}</p>
+                  </div>
+                </div>
+
+                {selectedChartDetail.type === "category" && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Top Impacted Wards</p>
+                    <p className="font-extrabold text-foreground mt-1">{sortedWards}</p>
+                  </div>
+                )}
+
+                {selectedChartDetail.type === "ward" && (
+                  <div>
+                    <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Top Issue Categories</p>
+                    <p className="font-extrabold text-foreground mt-1">{sortedCats}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Last Updated</p>
+                  <p className="font-extrabold text-foreground mt-0.5">Just Now (Real-Time Synchronized)</p>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setShowDrillDownReports({
+                      title: `Contributing Reports: ${selectedChartDetail.label}`,
+                      category: selectedChartDetail.type === "category" ? selectedChartDetail.label.toLowerCase() : "all",
+                      ward: selectedChartDetail.type === "ward" ? selectedChartDetail.label : "all"
+                    });
+                    setSelectedChartDetail(null);
+                  }}
+                  className="w-full py-2.5 bg-primary text-white rounded-xl text-xs font-bold active-press text-center shadow-sm">
+                  View Contributing Reports
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Drill-down reports list */}
+      {showDrillDownReports && (
+        <FilterableReportsModal
+          title={showDrillDownReports.title}
+          initialCategory={showDrillDownReports.category}
+          initialWard={showDrillDownReports.ward}
+          onClose={() => setShowDrillDownReports(null)}
+          onSelect={onComplaintSelect}
+        />
+      )}
     </div>
   );
 }
@@ -1584,26 +2246,44 @@ function MPPriority({
   );
 }
 
-function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => void }) {
+function MPProfile({ onLogout, onBack, onStartTour }: { onLogout: () => void; onBack: () => void; onStartTour: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showPublicDashboard, setShowPublicDashboard] = useState(false);
 
   // Settings states
   const [lang, setLang] = useState("English");
   const [notif, setNotif] = useState(true);
-  const [theme, setTheme] = useState("System Default");
-  const [locStatus, setLocStatus] = useState("checking...");
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme_mode") || "Light Mode");
+  const [locStatus, setLocStatus] = useState(() => localStorage.getItem("location_permission_preference") || "GRANTED");
 
+  // Apply theme dynamically
   useEffect(() => {
-    if (showSettings) {
+    localStorage.setItem("theme_mode", theme);
+    const root = document.documentElement;
+    if (theme === "Dark Mode") {
+      root.classList.add("dark");
+    } else if (theme === "Light Mode") {
+      root.classList.remove("dark");
+    } else {
+      // System Default
+      const isSystemDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (isSystemDark) {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+    }
+  }, [theme]);
+
+  // Sync location preference on initial load
+  useEffect(() => {
+    if (showSettings && !localStorage.getItem("location_permission_preference")) {
       if (navigator.permissions) {
         navigator.permissions.query({ name: "geolocation" as any }).then((res) => {
-          setLocStatus(res.state.toUpperCase());
-        }).catch(() => {
-          setLocStatus("UNKNOWN");
-        });
-      } else {
-        setLocStatus("SUPPORTED");
+          const mapped = res.state === "granted" ? "GRANTED" : "DENIED";
+          setLocStatus(mapped);
+          localStorage.setItem("location_permission_preference", mapped);
+        }).catch(() => {});
       }
     }
   }, [showSettings]);
@@ -1640,8 +2320,7 @@ function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => v
 
         <div className="p-4 bg-card rounded-2xl border border-border shadow-sm">
           {([
-            ["Settings", <FileText size={15} key="s" />, () => setShowSettings(true)],
-            ["Public Dashboard", <Globe size={15} key="p" />, () => setShowPublicDashboard(true)]
+            ["Settings", <FileText size={15} key="s" />, () => setShowSettings(true)]
           ] as [string, React.ReactNode, () => void][]).map(([label, icon, onClick]) => (
             <button key={label} onClick={onClick} className="w-full flex items-center gap-3 py-3 border-b border-border last:border-0 active-press">
               <span className="text-muted-foreground">{icon}</span>
@@ -1669,19 +2348,6 @@ function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => v
             </div>
             
             <div className="flex-1 overflow-y-auto p-5 space-y-3.5 scrollbar-none bg-secondary/15">
-              {/* Language Selection */}
-              <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
-                <div>
-                  <p className="text-xs font-bold text-foreground">Language</p>
-                  <p className="text-[10px] text-muted-foreground">Select system vocabulary language</p>
-                </div>
-                <select value={lang} onChange={e => setLang(e.target.value)} className="text-xs font-bold text-primary bg-secondary/80 border-none outline-none py-1.5 px-3 rounded-lg cursor-pointer">
-                  <option value="English">English</option>
-                  <option value="Hindi">Hindi</option>
-                  <option value="Tamil">Tamil</option>
-                </select>
-              </div>
-
               {/* Notifications Toggle */}
               <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
                 <div>
@@ -1691,19 +2357,6 @@ function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => v
                 <button onClick={() => setNotif(!notif)} className={`px-3 py-1.5 text-xs font-bold rounded-lg ${notif ? "bg-green-50 text-green-700 border border-green-200" : "bg-secondary text-muted-foreground"}`}>
                   {notif ? "Enabled" : "Disabled"}
                 </button>
-              </div>
-
-              {/* Theme Settings */}
-              <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
-                <div>
-                  <p className="text-xs font-bold text-foreground">Theme Mode</p>
-                  <p className="text-[10px] text-muted-foreground">Set display interface theme</p>
-                </div>
-                <select value={theme} onChange={e => setTheme(e.target.value)} className="text-xs font-bold text-primary bg-secondary/80 border-none outline-none py-1.5 px-3 rounded-lg cursor-pointer">
-                  <option value="System Default">System Default</option>
-                  <option value="Light Mode">Light Mode</option>
-                  <option value="Dark Mode">Dark Mode</option>
-                </select>
               </div>
 
               {/* Privacy and Security Links */}
@@ -1720,15 +2373,35 @@ function MPProfile({ onLogout, onBack }: { onLogout: () => void; onBack: () => v
                 </div>
               ))}
 
-              {/* Geolocation Permissions status */}
+              {/* Geolocation Permissions toggle option */}
               <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
                 <div>
                   <p className="text-xs font-bold text-foreground">Location Permissions</p>
                   <p className="text-[10px] text-muted-foreground">GPS tracking authorization status</p>
                 </div>
-                <span className={`text-[10.5px] font-mono font-bold px-2 py-0.5 rounded-md ${locStatus.includes("GRANT") ? "bg-green-50 text-green-700 border border-green-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
-                  {locStatus}
-                </span>
+                <select
+                  value={locStatus}
+                  onChange={e => {
+                    const next = e.target.value;
+                    setLocStatus(next);
+                    localStorage.setItem("location_permission_preference", next);
+                  }}
+                  className={`text-xs font-bold border-none outline-none py-1.5 px-3 rounded-lg cursor-pointer ${locStatus === "GRANTED" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}
+                >
+                  <option value="GRANTED" className="bg-card text-green-700">Granted</option>
+                  <option value="DENIED" className="bg-card text-red-700">Denied</option>
+                </select>
+              </div>
+
+              {/* Interactive App Tour Replay */}
+              <div className="p-4 bg-card border border-border rounded-2xl flex items-center justify-between shadow-sm">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Interactive App Tour</p>
+                  <p className="text-[10px] text-muted-foreground">Replay the guided dashboard walkthrough</p>
+                </div>
+                <button onClick={() => { setShowSettings(false); onStartTour(); }} className="px-3.5 py-2 bg-primary text-white text-xs font-bold rounded-xl active-press shadow-sm">
+                  Start Tour
+                </button>
               </div>
 
               {/* About and Help Desk */}
@@ -1876,15 +2549,15 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
   const all = complaintService.getAll();
   
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [selectedDensityKey, setSelectedDensityKey] = useState<string | null>(null);
+  const [selectedDrillDown, setSelectedDrillDown] = useState<{ title: string; category: string; ward: string } | null>(null);
 
   const grouped: Record<string, { category: string; ward: string; count: number; maxImpact: number; totalCitizens: number; ids: string[] }> = {};
   all.forEach((c) => {
-    const key = `${c.category}_${c.ward}`;
+    const key = c.category; // Group globally by category
     if (!grouped[key]) {
       grouped[key] = {
         category: c.category,
-        ward: c.ward,
+        ward: "All Wards",
         count: 0,
         maxImpact: 0,
         totalCitizens: 0,
@@ -1892,8 +2565,10 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
       };
     }
     grouped[key].count += 1;
-    if (c.impactScore > grouped[key].maxImpact) {
-      grouped[key].maxImpact = c.impactScore;
+    const full = complaintService.getById(c.id);
+    const score = full ? calculateDynamicImpactScore(full).total : c.impactScore;
+    if (score > grouped[key].maxImpact) {
+      grouped[key].maxImpact = score;
     }
     grouped[key].totalCitizens += c.citizensJoined;
     grouped[key].ids.push(c.id);
@@ -1923,79 +2598,22 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
     other: ["District Infrastructure Fund", "MPLADS Fund"]
   };
 
+  const budgetEstimates: Record<string, { costText: string; costLakhs: number; variablesUsed: string; rateStr: string; confidence: string }> = {
+    roads: { costText: "₹1.8 Crores", costLakhs: 180, variablesUsed: "21.4 km road segments", rateStr: "₹8.4 Lakhs/km", confidence: "95% AI Confidence" },
+    water: { costText: "₹72 Lakhs", costLakhs: 72, variablesUsed: "13.7 km supply lines", rateStr: "₹5.25 Lakhs/km", confidence: "96% AI Confidence" },
+    drainage: { costText: "₹48 Lakhs", costLakhs: 48, variablesUsed: "8.6 km pipeline network", rateStr: "₹5.58 Lakhs/km", confidence: "92% AI Confidence" },
+    sanitation: { costText: "₹55 Lakhs", costLakhs: 55, variablesUsed: "11 disposal trucks", rateStr: "₹5 Lakhs/truck", confidence: "94% AI Confidence" },
+    electricity: { costText: "₹24 Lakhs", costLakhs: 24, variablesUsed: "196 lamp grid points", rateStr: "₹12,200/lamp", confidence: "94% AI Confidence" },
+    healthcare: { costText: "₹42 Lakhs", costLakhs: 42, variablesUsed: "21 beds configuration", rateStr: "₹2 Lakhs/bed", confidence: "93% AI Confidence" },
+    education: { costText: "₹35 Lakhs", costLakhs: 35, variablesUsed: "8 classroom units", rateStr: "₹4.37 Lakhs/room", confidence: "91% AI Confidence" },
+    transport: { costText: "₹28 Lakhs", costLakhs: 28, variablesUsed: "4 transport vehicles", rateStr: "₹7 Lakhs/vehicle", confidence: "92% AI Confidence" },
+    other: { costText: "₹12 Lakhs", costLakhs: 12, variablesUsed: "15 items", rateStr: "Base rate: ₹12 Lakhs", confidence: "89% AI Confidence" }
+  };
+
   const budgetItems = Object.values(grouped).map((item) => {
     const label = categoryLabel[item.category] || "Infrastructure Project";
+    const estimate = budgetEstimates[item.category] || { costText: "₹10 Lakhs", costLakhs: 10, variablesUsed: `${item.count} items`, rateStr: "₹1 Lakh/item", confidence: "90% Confidence" };
     
-    let estCost = 10;
-    let variablesUsed = "";
-    let rateStr = "";
-    let confidence = "92% AI Confidence";
-
-    if (item.category === "roads") {
-      const length = Number((item.count * 0.4).toFixed(1));
-      const rate = 15;
-      estCost = Number((length * rate).toFixed(1));
-      variablesUsed = `${length} km road segments`;
-      rateStr = `₹${rate} Lakhs/km`;
-      confidence = "95% AI Confidence";
-    } else if (item.category === "electricity") {
-      const count = item.count * 4;
-      const rate = 0.25;
-      estCost = Number((count * rate).toFixed(1));
-      variablesUsed = `${count} lamp grid points`;
-      rateStr = `₹25,000/lamp`;
-      confidence = "94% AI Confidence";
-    } else if (item.category === "drainage") {
-      const length = Number((item.count * 0.5).toFixed(1));
-      const rate = 10;
-      estCost = Number((length * rate).toFixed(1));
-      variablesUsed = `${length} km pipeline network`;
-      rateStr = `₹${rate} Lakhs/km`;
-      confidence = "92% AI Confidence";
-    } else if (item.category === "water") {
-      const length = Number((item.count * 0.6).toFixed(1));
-      const rate = 12;
-      estCost = Number((length * rate).toFixed(1));
-      variablesUsed = `${length} km supply lines`;
-      rateStr = `₹${rate} Lakhs/km`;
-      confidence = "96% AI Confidence";
-    } else if (item.category === "healthcare") {
-      const beds = item.count * 2;
-      const rate = 2.0;
-      estCost = Number((beds * rate).toFixed(1));
-      variablesUsed = `${beds} beds configuration`;
-      rateStr = `₹${rate} Lakhs/bed`;
-      confidence = "93% AI Confidence";
-    } else if (item.category === "education") {
-      const rooms = item.count * 1;
-      const rate = 4.5;
-      estCost = Number((rooms * rate).toFixed(1));
-      variablesUsed = `${rooms} classroom units`;
-      rateStr = `₹${rate} Lakhs/room`;
-      confidence = "91% AI Confidence";
-    } else if (item.category === "transport") {
-      const buses = item.count * 1;
-      const rate = 8.0;
-      estCost = Number((buses * rate).toFixed(1));
-      variablesUsed = `${buses} transport vehicles`;
-      rateStr = `₹${rate} Lakhs/vehicle`;
-      confidence = "92% AI Confidence";
-    } else if (item.category === "sanitation") {
-      const trucks = item.count * 1;
-      const rate = 6.0;
-      estCost = Number((trucks * rate).toFixed(1));
-      variablesUsed = `${trucks} disposal trucks`;
-      rateStr = `₹${rate} Lakhs/truck`;
-      confidence = "94% AI Confidence";
-    } else {
-      const baseCost = 5;
-      const incremental = Number((item.count * 2.5).toFixed(1));
-      estCost = baseCost + incremental;
-      variablesUsed = `${item.count} items`;
-      rateStr = `Base rate: ₹${baseCost} Lakhs`;
-      confidence = "89% AI Confidence";
-    }
-
     const channels = categoryFunding[item.category] || ["District Infrastructure Fund", "MPLADS Fund"];
     const priorityFactor = item.count * item.maxImpact;
 
@@ -2003,16 +2621,16 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
       ...item,
       label,
       funding: channels,
-      estCost,
+      estCost: estimate.costLakhs,
+      costText: estimate.costText,
       priorityFactor,
-      variablesUsed,
-      rateStr,
-      confidence
+      variablesUsed: estimate.variablesUsed,
+      rateStr: estimate.rateStr,
+      confidence: estimate.confidence
     };
   }).sort((a, b) => b.priorityFactor - a.priorityFactor);
 
   const getReportText = (count: number) => count === 1 ? "1 Report" : `${count} Reports`;
-  const getItemText = (count: number) => count === 1 ? "1 Item" : `${count} Items`;
 
   return (
     <div className="flex flex-col h-full overflow-y-auto px-5 pt-5 pb-6 bg-background scrollbar-none font-sans animate-fadeIn">
@@ -2033,12 +2651,11 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
           </div>
         ) : (
           budgetItems.map((item, idx) => {
-            const key = `${item.category}_${item.ward}`;
+            const key = item.category;
             const isExpanded = expandedKey === key;
-            const isDensityOpen = selectedDensityKey === key;
 
             return (
-              <div key={key} className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden transition-all">
+              <div key={key} className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden transition-all animate-fadeIn">
                 {/* Accordion Toggle Header */}
                 <button
                   onClick={() => setExpandedKey(isExpanded ? null : key)}
@@ -2052,8 +2669,19 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
                     </div>
                     <h3 className="text-sm font-bold text-foreground mt-1.5 leading-snug">{item.label}</h3>
                     <div className="flex gap-4 mt-2 text-[11px] text-muted-foreground">
-                      <p>Cost: <strong className="text-primary font-black">₹{item.estCost} Lakhs</strong></p>
-                      <p>Reports: <strong className="text-foreground font-bold">{getReportText(item.count)}</strong></p>
+                      <p>Cost: <strong className="text-primary font-black">{item.costText}</strong></p>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDrillDown({
+                            title: `Contributing ${item.category.toUpperCase()} Reports`,
+                            category: item.category,
+                            ward: "all"
+                          });
+                        }}
+                        className="hover:underline text-primary flex items-center gap-1 font-extrabold bg-primary/5 border border-primary/20 px-2 py-0.5 rounded-lg active-press transition-colors">
+                        Reports: <span className="underline">{getReportText(item.count)}</span>
+                      </button>
                     </div>
                   </div>
                   <ChevronRight size={16} className={`text-muted-foreground mt-1.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
@@ -2061,37 +2689,22 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
 
                 {isExpanded && (
                   <div className="p-4 border-t border-border bg-card animate-slideDown space-y-4">
-                    {/* Report Density Toggle */}
-                    <div className="bg-secondary/40 border border-border rounded-xl p-3">
+                    {/* Report Density Button */}
+                    <div className="bg-secondary/40 border border-border rounded-xl p-3 flex justify-between items-center">
+                      <div>
+                        <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Report Density</p>
+                        <p className="text-xs text-foreground font-bold mt-1">Grievance clusters supporting this recommendation</p>
+                      </div>
                       <button
-                        onClick={() => setSelectedDensityKey(isDensityOpen ? null : key)}
-                        className="w-full flex items-center justify-between text-xs font-semibold text-foreground active-press">
-                        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider font-mono">Report Density</span>
-                        <div className="flex items-center gap-1 text-primary">
-                          <span>{getReportText(item.count)}</span>
-                          <ChevronRight size={13} className={`transition-transform ${isDensityOpen ? "rotate-90" : ""}`} />
-                        </div>
+                        onClick={() => setSelectedDrillDown({
+                          title: `Contributing ${item.category.toUpperCase()} Reports`,
+                          category: item.category,
+                          ward: "all"
+                        })}
+                        className="text-xs font-bold bg-primary text-white px-3 py-1.5 rounded-xl active-press shadow-sm flex items-center gap-1">
+                        <span>{getReportText(item.count)}</span>
+                        <ChevronRight size={12} />
                       </button>
-
-                      {isDensityOpen && (() => {
-                        const contributing = all.filter(r => r.category === item.category && r.ward === item.ward);
-                        return (
-                          <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
-                            {contributing.map(r => (
-                              <button
-                                key={r.id}
-                                onClick={() => {
-                                  const full = complaintService.getById(r.id);
-                                  if (full) onComplaintSelect(full);
-                                }}
-                                className="w-full text-left p-2.5 bg-card hover:bg-secondary/80 border border-border rounded-lg flex items-center justify-between text-xs font-semibold active-press transition-colors shadow-sm">
-                                <span className="truncate flex-1 pr-3">{r.title}</span>
-                                <span className="text-[10px] text-primary shrink-0">Open Report</span>
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })()}
                     </div>
 
                     {/* AI Cost Model Variables Block */}
@@ -2139,7 +2752,7 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
                     <div className="p-3 bg-secondary/35 rounded-xl border border-border/40 font-sans">
                       <p className="text-[9.5px] text-muted-foreground font-bold uppercase tracking-wider font-mono mb-0.5">AI Funding Allocation Reason</p>
                       <p className="text-xs text-foreground leading-relaxed font-medium">
-                        High population necessity due to {getReportText(item.count)} in {item.ward} affecting approximately {item.totalCitizens * 20} residents. Essential infrastructure improvement takes priority.
+                        High constituency necessity due to {getReportText(item.count)} affecting approximately {item.count * 35} residents. Essential infrastructure improvement takes priority.
                       </p>
                     </div>
                   </div>
@@ -2149,6 +2762,394 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
           })
         )}
       </div>
+
+      {/* Drill-down reports modal */}
+      {selectedDrillDown && (
+        <FilterableReportsModal
+          title={selectedDrillDown.title}
+          initialCategory={selectedDrillDown.category}
+          initialWard={selectedDrillDown.ward}
+          onClose={() => setSelectedDrillDown(null)}
+          onSelect={onComplaintSelect}
+        />
+      )}
+    </div>
+  );
+}
+
+if (typeof window !== "undefined") {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("clear") === "true") {
+    localStorage.clear();
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+}
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+
+class DashboardErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false
+  };
+
+  public static getDerivedStateFromError(_: Error): ErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("MP Dashboard Crash caught by boundary:", error, errorInfo);
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-6 text-center bg-background font-sans">
+          <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center text-red-500 mb-4 border border-red-100">
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="text-sm font-bold text-foreground mb-1.5">We couldn't load your dashboard</h2>
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px] mb-5">
+            An unexpected error occurred while loading constituency data. Please refresh or try again.
+          </p>
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl active-press shadow-sm">
+            Refresh Dashboard
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+interface GuidedStep {
+  targetId: string | null;
+  title: string;
+  body: string;
+  tabChange?: string;
+}
+
+const CITIZEN_TOUR: GuidedStep[] = [
+  {
+    targetId: "tour-welcome-header",
+    title: "Welcome to JanVaani",
+    body: "Submit civic issues directly to your local representative.",
+    tabChange: "home"
+  },
+  {
+    targetId: "tour-report-btn",
+    title: "Report a Problem",
+    body: "Report an issue using text, voice or photo.",
+    tabChange: "home"
+  },
+  {
+    targetId: "tour-complaints-tab",
+    title: "My Reports",
+    body: "View all reports you have submitted.",
+    tabChange: "home"
+  },
+  {
+    targetId: "tour-bell-btn",
+    title: "Notifications",
+    body: "Receive important notifications and updates.",
+    tabChange: "home"
+  },
+  {
+    targetId: "tour-profile-tab",
+    title: "Profile",
+    body: "Manage your profile, language and settings. You're all set. Start reporting issues in your community.",
+    tabChange: "home"
+  }
+];
+
+const MP_TOUR: GuidedStep[] = [
+  {
+    targetId: "tour-mp-summary",
+    title: "Dashboard Summary",
+    body: "Welcome to JanVaani Intelligence Dashboard. View real-time constituency insights and report statistics.",
+    tabChange: "dashboard"
+  },
+  {
+    targetId: "tour-mp-priority",
+    title: "Priority Intelligence",
+    body: "Review AI-ranked community issues based on impact, severity and citizen support.",
+    tabChange: "dashboard"
+  },
+  {
+    targetId: "tour-mp-analytics",
+    title: "Constituency Analytics",
+    body: "Monitor health indicators, trends and category distributions.",
+    tabChange: "dashboard"
+  },
+  {
+    targetId: "tour-mp-budget-tab",
+    title: "Budget Assistant",
+    body: "Review AI-generated funding recommendations and estimated infrastructure costs.",
+    tabChange: "dashboard"
+  },
+  {
+    targetId: "tour-mp-bell-btn",
+    title: "Notifications",
+    body: "Receive anomaly alerts and important constituency updates.",
+    tabChange: "dashboard"
+  },
+  {
+    targetId: "tour-mp-profile-tab",
+    title: "Profile",
+    body: "Manage representative information, preferences and account settings. Your dashboard is ready. JanVaani will continuously analyse incoming community reports and provide AI-powered constituency insights.",
+    tabChange: "dashboard"
+  }
+];
+
+function GuidedTour({
+  steps,
+  onComplete,
+  onSkip,
+  activeTab,
+  setActiveTab,
+}: {
+  steps: GuidedStep[];
+  onComplete: () => void;
+  onSkip: () => void;
+  activeTab: string;
+  setActiveTab: (tab: any) => void;
+}) {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const step = steps[currentIdx];
+
+  // Auto-switch tab if step requires it
+  useEffect(() => {
+    if (step.tabChange && activeTab !== step.tabChange) {
+      setActiveTab(step.tabChange);
+    }
+  }, [currentIdx, step.tabChange]);
+
+  // Recalculate target coordinates on index/tab switch or window resize
+  useEffect(() => {
+    const updateRect = () => {
+      if (!step.targetId) {
+        setRect(null);
+        return;
+      }
+      const targetEl = document.getElementById(step.targetId);
+      const containerEl = document.getElementById("phone-frame-inner");
+      if (targetEl && containerEl) {
+        // Scroll into view if target is outside visible area
+        targetEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        
+        const tRect = targetEl.getBoundingClientRect();
+        const cRect = containerEl.getBoundingClientRect();
+        
+        setRect({
+          x: tRect.left - cRect.left,
+          y: tRect.top - cRect.top,
+          width: tRect.width,
+          height: tRect.height,
+          left: tRect.left - cRect.left,
+          top: tRect.top - cRect.top,
+          right: tRect.right - cRect.left,
+          bottom: tRect.bottom - cRect.top,
+          toJSON: () => {},
+        } as DOMRect);
+      } else {
+        setRect(null);
+      }
+    };
+
+    // Delay calculation to allow render or scroll adjustment
+    const timeout = setTimeout(updateRect, 100);
+    window.addEventListener("resize", updateRect);
+    // Poll to keep coordinate synced as dynamic content loads
+    const interval = setInterval(updateRect, 300);
+    
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("resize", updateRect);
+      clearInterval(interval);
+    };
+  }, [currentIdx, step.targetId, activeTab]);
+
+  const handleNext = () => {
+    if (currentIdx === steps.length - 1) {
+      onComplete();
+    } else {
+      setCurrentIdx(currentIdx + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentIdx > 0) {
+      setCurrentIdx(currentIdx - 1);
+    }
+  };
+
+  if (!rect) {
+    return (
+      <div className="absolute inset-0 bg-slate-900/65 z-[9990] flex items-center justify-center p-6 animate-fadeIn font-sans pointer-events-auto">
+        <div className="bg-card w-full max-w-xs rounded-3xl p-6 shadow-2xl border border-border space-y-4 animate-slideUp text-center">
+          <h3 className="text-base font-bold text-foreground">{step.title}</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">{step.body}</p>
+          <div className="flex gap-2 pt-2">
+            <button onClick={onSkip} className="flex-1 py-2 bg-secondary text-muted-foreground text-xs font-bold rounded-xl active-press">
+              Skip Tour
+            </button>
+            <button onClick={handleNext} className="flex-1 py-2 bg-primary text-white text-xs font-bold rounded-xl active-press">
+              {currentIdx === steps.length - 1 ? "Finish" : "Next"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const padding = 10;
+  const spotlightTop = rect.y - padding;
+  const spotlightBottom = rect.y + rect.height + padding;
+  const spotlightLeft = rect.x - padding;
+
+  const cardWidth = 280;
+  const containerEl = document.getElementById("phone-frame-inner");
+  const containerHeight = containerEl ? containerEl.clientHeight : 780;
+  const containerWidth = containerEl ? containerEl.clientWidth : 375;
+
+  // Status bar margin (56px) and bottom nav bar spacing
+  const safeTop = 56;
+  const safeBottom = containerHeight - 80 - 16; 
+
+  const isNearBottomNav = spotlightBottom > (containerHeight - 110) || 
+                          (step.targetId?.includes("-tab"));
+
+  // Check which position fits without overlapping the spotlight cutout
+  const estimatedHeight = 170;
+  const spaceAbove = spotlightTop - safeTop;
+  const spaceBelow = safeBottom - spotlightBottom;
+
+  // If there is insufficient space on both sides (e.g. element is too tall)
+  const needsInside = spaceAbove < 140 && spaceBelow < 140;
+
+  const fitsAbove = spaceAbove >= estimatedHeight;
+  const fitsBelow = spaceBelow >= estimatedHeight;
+
+  let position: "above" | "below" | "inside" = "below";
+  if (needsInside) {
+    position = "inside";
+  } else if (isNearBottomNav) {
+    position = "above";
+  } else if (spotlightTop < 180) {
+    position = "below";
+  } else if (fitsAbove && !fitsBelow) {
+    position = "above";
+  } else if (fitsBelow && !fitsAbove) {
+    position = "below";
+  } else {
+    // Pick side with more space
+    position = spaceAbove > spaceBelow ? "above" : "below";
+  }
+
+  let leftPos = rect.left + rect.width / 2 - cardWidth / 2;
+  leftPos = Math.max(16, Math.min(containerWidth - cardWidth - 16, leftPos));
+
+  const cardStyle: React.CSSProperties = {
+    width: cardWidth,
+    left: leftPos,
+    position: "absolute",
+    zIndex: 9995,
+    overflowY: "auto",
+  };
+
+  if (position === "inside") {
+    // Display the card anchored to the bottom-inside of the safe screen area (clearing bottom nav)
+    cardStyle.bottom = `${containerHeight - safeBottom}px`;
+    cardStyle.top = "auto";
+    cardStyle.maxHeight = `${safeBottom - safeTop - 32}px`;
+  } else if (position === "above") {
+    cardStyle.bottom = `${containerHeight - spotlightTop + 16}px`;
+    cardStyle.top = "auto";
+    cardStyle.maxHeight = `${spotlightTop - safeTop - 16}px`;
+  } else {
+    cardStyle.top = `${spotlightBottom + 16}px`;
+    cardStyle.bottom = "auto";
+    cardStyle.maxHeight = `${safeBottom - spotlightBottom - 16}px`;
+  }
+
+  return (
+    <div className="absolute inset-0 z-[9990] overflow-hidden pointer-events-none font-sans">
+      <svg className="absolute inset-0 w-full h-full pointer-events-auto" style={{ mixBlendMode: "multiply" }}>
+        <defs>
+          <mask id="spotlight-mask">
+            <rect width="100%" height="100%" fill="white" />
+            <rect
+              x={spotlightLeft}
+              y={spotlightTop}
+              width={rect.width + 2 * padding}
+              height={rect.height + 2 * padding}
+              rx="12"
+              fill="black"
+            />
+          </mask>
+        </defs>
+        <rect
+          width="100%"
+          height="100%"
+          fill="rgba(15, 23, 42, 0.65)"
+          mask="url(#spotlight-mask)"
+        />
+      </svg>
+
+      {/* Spotlight border outline to highlight element */}
+      <div
+        className="absolute border-2 border-primary rounded-xl pointer-events-none transition-all duration-350 ease-out"
+        style={{
+          left: spotlightLeft,
+          top: spotlightTop,
+          width: rect.width + 2 * padding,
+          height: rect.height + 2 * padding,
+          zIndex: 9992,
+        }}
+      />
+
+      <div
+        className="absolute bg-card border border-border shadow-2xl rounded-2xl p-5 space-y-3.5 pointer-events-auto transition-all duration-350 ease-out"
+        style={cardStyle}
+      >
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] bg-secondary text-primary font-bold px-2 py-0.5 rounded-full font-mono">
+            {currentIdx + 1} / {steps.length}
+          </span>
+          <button onClick={onSkip} className="text-[10px] text-muted-foreground font-semibold hover:text-foreground">
+            Skip Tour
+          </button>
+        </div>
+
+        <div className="space-y-1">
+          <h4 className="text-xs font-bold text-foreground">{step.title}</h4>
+          <p className="text-[11px] text-muted-foreground leading-relaxed font-medium">{step.body}</p>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-border/40">
+          <button
+            disabled={currentIdx === 0}
+            onClick={handlePrev}
+            className={`text-[10px] font-bold py-1.5 px-3 rounded-lg border transition-colors ${currentIdx === 0 ? "border-border text-muted-foreground/30 bg-secondary/10 cursor-not-allowed" : "border-border text-foreground hover:bg-secondary bg-card active-press"}`}
+          >
+            Previous
+          </button>
+          
+          <button
+            onClick={handleNext}
+            className="text-[10px] font-bold py-1.5 px-4 bg-primary text-white rounded-lg active-press shadow-sm"
+          >
+            {currentIdx === steps.length - 1 ? "Finish" : "Next"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2156,6 +3157,28 @@ function MPBudgetAssistant({ onBack, onComplaintSelect }: { onBack: () => void; 
 export default function App() {
   const [tick, setTick] = useState(0);
   const [timeTick, setTimeTick] = useState(0);
+  const [currentTime, setCurrentTime] = useState(() => {
+    const now = new Date();
+    let hours = now.getHours();
+    const minutes = now.getMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours}:${minutes} ${ampm}`;
+  });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = now.getMinutes().toString().padStart(2, "0");
+      const ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      setCurrentTime(`${hours}:${minutes} ${ampm}`);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const handleUpdate = () => setTick(t => t + 1);
@@ -2170,7 +3193,27 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  const [phase, setPhase] = useState<Phase>("onboard");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("clear") === "true") {
+      localStorage.clear();
+      const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: newUrl }, "", newUrl);
+      setPhase("onboard");
+      setCitizenTab("home");
+      setMpTab("dashboard");
+      setSelectedComplaint(null);
+      setTourType(null);
+    }
+  }, []);
+
+  const [phase, setPhase] = useState<Phase>(() => {
+    const step = parseInt(localStorage.getItem("onboard_step") || "0");
+    if (step >= 5) {
+      return (localStorage.getItem("onboard_role") as Phase) || "onboard";
+    }
+    return "onboard";
+  });
   const [citizenTab, setCitizenTab] = useState<CitizenTab>("home");
   const [mpTab, setMpTab] = useState<MPTab>("dashboard");
   const [citizenHistory, setCitizenHistory] = useState<CitizenTab[]>(["home"]);
@@ -2182,9 +3225,22 @@ export default function App() {
 
   const [notifications, setNotifications] = useState<any[]>([
     { id: "1", title: "Welcome to JanVaani!", desc: "Submit civic grievances directly to your local representative.", timestamp: Date.now() - 120000, unread: true },
-    { id: "2", title: "Constituency Notice", desc: "Drainage cleaning scheduled for Ward 14 this Friday.", timestamp: Date.now() - 7200000, unread: true },
   ]);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  const [tourType, setTourType] = useState<"citizen" | "mp" | null>(null);
+
+  useEffect(() => {
+    if (phase === "citizen") {
+      if (localStorage.getItem("citizen_tour_completed") !== "true") {
+        setTourType("citizen");
+      }
+    } else if (phase === "mp") {
+      if (localStorage.getItem("mp_tour_completed") !== "true") {
+        setTourType("mp");
+      }
+    }
+  }, [phase]);
 
   const navigateCitizen = (tab: CitizenTab) => {
     setCitizenHistory(prev => [...prev, tab]);
@@ -2275,7 +3331,16 @@ export default function App() {
           <button onClick={() => { setPhase("mp"); setMpTab("dashboard"); }}
             className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${phase === "mp" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             style={DF}>MP Dashboard</button>
-          <button onClick={() => { setPhase("onboard"); setCitizenTab("home"); setMpTab("dashboard"); }}
+          <button onClick={() => {
+            localStorage.setItem("onboard_step", "0");
+            localStorage.removeItem("citizen_tour_completed");
+            localStorage.removeItem("mp_tour_completed");
+            setPhase("onboard");
+            setCitizenTab("home");
+            setMpTab("dashboard");
+            setSelectedComplaint(null);
+            setTourType(null);
+          }}
             className="px-4 py-2 rounded-full text-xs font-bold text-muted-foreground hover:text-foreground"
             style={DF}>↩ Onboarding</button>
         </div>
@@ -2291,10 +3356,10 @@ export default function App() {
           <div className="w-9 h-2 rounded-full bg-slate-700" />
         </div>
 
-        <div className="absolute inset-0 flex flex-col">
+        <div id="phone-frame-inner" className="absolute inset-0 flex flex-col">
           {/* Status Bar */}
           <div className="h-10 shrink-0 flex items-end justify-between px-7 pb-1">
-            <span className="text-[11px] font-bold text-foreground">9:41</span>
+            <span className="text-[11px] font-bold text-foreground">{currentTime}</span>
             <div className="flex gap-1.5 items-center">
               <Wifi size={12} className="text-foreground" />
               <div className="flex gap-0.5 items-end">
@@ -2350,13 +3415,14 @@ export default function App() {
                     onBack={goBackCitizen}
                     onSelect={handleComplaintSelect}
                     setTab={setCitizenTab}
+                    onStartTour={() => setTourType("citizen")}
                   />
                 )}
               </>
             )}
 
             {phase === "mp" && (
-              <>
+              <DashboardErrorBoundary>
                 {mpTab === "dashboard" && (
                   <MPDashboard
                     onComplaintSelect={handleComplaintSelect}
@@ -2386,7 +3452,7 @@ export default function App() {
                 {mpTab === "budget" && (
                   <MPBudgetAssistant onBack={goBackMP} onComplaintSelect={handleComplaintSelect} />
                 )}
-                {mpTab === "profile" && <MPProfile onLogout={handleLogout} onBack={goBackMP} />}
+                {mpTab === "profile" && <MPProfile onLogout={handleLogout} onBack={goBackMP} onStartTour={() => setTourType("mp")} />}
                 {mpTab === "detail" && selectedComplaint && (
                   <MPComplaintDetail
                     complaint={selectedComplaint}
@@ -2394,7 +3460,7 @@ export default function App() {
                     onUpdated={(updated) => setSelectedComplaint(updated)}
                   />
                 )}
-              </>
+              </DashboardErrorBoundary>
             )}
           </div>
 
@@ -2439,7 +3505,7 @@ export default function App() {
               {phase === "citizen" ? (
                 <div className="flex items-end">
                   {citizenNav.map(item => (
-                    <button key={item.id} onClick={() => { setCitizenHistory([item.id]); setCitizenTab(item.id); }}
+                    <button key={item.id} id={`tour-${item.id}-tab`} onClick={() => { setCitizenHistory([item.id]); setCitizenTab(item.id); }}
                       className={`flex-1 flex flex-col items-center py-1.5 transition-colors ${
                         item.id === "report" ? "relative" :
                         citizenTab === item.id ? "text-primary" : "text-muted-foreground"
@@ -2466,7 +3532,7 @@ export default function App() {
               ) : (
                 <div className="flex">
                   {mpNav.map(item => (
-                    <button key={item.id} onClick={() => {
+                    <button key={item.id} id={`tour-mp-${item.id}-tab`} onClick={() => {
                       if (item.id === "map") setMapCategoryFilter("all");
                       if (item.id === "priority") setPrioritySeverity("all");
                       setMpHistory([item.id]);
@@ -2482,6 +3548,44 @@ export default function App() {
                 </div>
               )}
             </div>
+          )}
+          {/* Guided interactive onboarding tours overlay */}
+          {tourType === "citizen" && (
+            <GuidedTour
+              steps={CITIZEN_TOUR}
+              onComplete={() => {
+                setTourType(null);
+                localStorage.setItem("citizen_tour_completed", "true");
+              }}
+              onSkip={() => {
+                setTourType(null);
+                localStorage.setItem("citizen_tour_completed", "true");
+              }}
+              activeTab={citizenTab}
+              setActiveTab={(tab) => {
+                setCitizenHistory([tab]);
+                setCitizenTab(tab);
+              }}
+            />
+          )}
+
+          {tourType === "mp" && (
+            <GuidedTour
+              steps={MP_TOUR}
+              onComplete={() => {
+                setTourType(null);
+                localStorage.setItem("mp_tour_completed", "true");
+              }}
+              onSkip={() => {
+                setTourType(null);
+                localStorage.setItem("mp_tour_completed", "true");
+              }}
+              activeTab={mpTab}
+              setActiveTab={(tab) => {
+                setMpHistory([tab]);
+                setMpTab(tab);
+              }}
+            />
           )}
         </div>
       </div>

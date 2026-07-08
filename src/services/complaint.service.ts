@@ -201,6 +201,11 @@ function loadComplaintsLocal(): Complaint[] {
     if (!raw) return initSeedDataLocal();
     const complaints = JSON.parse(raw) as Complaint[];
     
+    // Seed rich data if current local storage only has basic seed data
+    if (complaints.length < 20) {
+      return initSeedDataLocal();
+    }
+
     // Migrate legacy status values from localStorage
     let migrated = false;
     complaints.forEach((c) => {
@@ -247,8 +252,200 @@ function saveComplaintsLocal(complaints: Complaint[]): void {
 }
 
 function initSeedDataLocal(): Complaint[] {
-  saveComplaintsLocal(SEED_COMPLAINTS);
-  return SEED_COMPLAINTS;
+  const seedList: Complaint[] = [ ...SEED_COMPLAINTS ];
+  
+  const targetCounts: Record<ComplaintCategory, number> = {
+    water: 136,
+    roads: 213,
+    sanitation: 111,
+    drainage: 85,
+    electricity: 48,
+    healthcare: 32,
+    education: 18,
+    transport: 22,
+    other: 15
+  };
+  
+  const categoryWards: Record<ComplaintCategory, { primary: string; primaryCount: number; secondary: string[] }> = {
+    water: { primary: "Ward 12", primaryCount: 90, secondary: ["Ward 11", "Ward 14", "Ward 8", "Ward 3", "Ward 5"] },
+    roads: { primary: "Ward 14", primaryCount: 120, secondary: ["Ward 12", "Ward 11", "Ward 8", "Ward 3", "Ward 5"] },
+    drainage: { primary: "Ward 8", primaryCount: 55, secondary: ["Ward 12", "Ward 11", "Ward 14", "Ward 3", "Ward 5"] },
+    sanitation: { primary: "Ward 11", primaryCount: 70, secondary: ["Ward 12", "Ward 14", "Ward 8", "Ward 3", "Ward 5"] },
+    electricity: { primary: "Ward 14", primaryCount: 25, secondary: ["Ward 12", "Ward 11", "Ward 8", "Ward 3", "Ward 5"] },
+    healthcare: { primary: "Ward 14", primaryCount: 20, secondary: ["Ward 12", "Ward 11", "Ward 8", "Ward 3", "Ward 5"] },
+    education: { primary: "Ward 12", primaryCount: 8, secondary: ["Ward 11", "Ward 14", "Ward 8", "Ward 3", "Ward 5"] },
+    transport: { primary: "Ward 11", primaryCount: 10, secondary: ["Ward 12", "Ward 14", "Ward 8", "Ward 3", "Ward 5"] },
+    other: { primary: "Ward 3", primaryCount: 6, secondary: ["Ward 12", "Ward 11", "Ward 14", "Ward 8", "Ward 5"] }
+  };
+  
+  const titlesAndDescs: Record<ComplaintCategory, { title: string; desc: string }[]> = {
+    water: [
+      { title: "No Drinking Water Supply", desc: "We have not received drinking water for the last 3 days. The municipal supply is completely dry." },
+      { title: "Water Pipeline Leakage", desc: "Water is leaking from the main pipeline near the corner shop, wasting thousands of litres." },
+      { title: "Low Water Pressure in Lines", desc: "The water pressure is so low that it doesn't reach the first floor." },
+      { title: "Contaminated Drinking Water", desc: "The water coming out of the taps is yellow and smells bad." },
+      { title: "Water Tanker Delay", desc: "The scheduled water tanker has not arrived today, causing high distress." }
+    ],
+    roads: [
+      { title: "Dangerous Potholes on Main Road", desc: "There are large, deep potholes on the main road that are causing accidents daily." },
+      { title: "Street Not Paved", desc: "The inner streets of our block have not been paved for years. It's a mud track during rains." },
+      { title: "Speed Breaker Missing near School", desc: "Vehicles speed past the school gate. We need a speed breaker and signage immediately." },
+      { title: "Water Logging on Road Corner", desc: "Heavy water accumulation on the main junction makes it impassable for pedestrians." },
+      { title: "Road Construction Left Incomplete", desc: "Contractor dug up the road for laying cables and left it open for three weeks." }
+    ],
+    drainage: [
+      { title: "Sewage Overflowing from Manhole", desc: "Sewer water is bubbling out of the manhole and flooding the entire street corner." },
+      { title: "Blocked Storm Water Drain", desc: "The storm water drain is choked with plastic and garbage, causing water backup." },
+      { title: "Stagnant Drain Water in Street", desc: "Open drain is clogged and stagnant water is breeding mosquitoes." },
+      { title: "Broken Sewage Pipe Leakage", desc: "A domestic sewer pipe is broken and leaking waste into the open ground." },
+      { title: "Bad Odour from Open Sewer", desc: "The stench from the uncleaned open drain is making it difficult to breathe." }
+    ],
+    electricity: [
+      { title: "Street Lights Not Working", desc: "The entire block is in darkness because none of the street lights work." },
+      { title: "Hanging Electrical Cables", desc: "Loose electrical wires are hanging low from the pole, risking lives of passersby." },
+      { title: "Flickering Street Lamp", desc: "The street light keeps blinking and making buzzing noises." },
+      { title: "Transformer Sparking Frequently", desc: "The local distribution transformer is overloading and sparking during peak hours." },
+      { title: "Frequent Power Fluctuations", desc: "Constant voltage drops are damaging domestic electronic appliances." }
+    ],
+    sanitation: [
+      { title: "Garbage Overflowing from Bins", desc: "Municipal trash bins are full and garbage is spilling onto the street." },
+      { title: "No Waste Collection for 4 Days", desc: "The garbage collection vehicle has not visited our street for 4 days." },
+      { title: "Illegal Garbage Dumping", desc: "People are dumping construction debris and commercial waste in the empty plot." },
+      { title: "Dead Animal on Roadside", desc: "A stray animal has died and the body is rotting, creating a massive sanitation issue." },
+      { title: "Public Toilet Unclean", desc: "The public toilet facility is extremely dirty and has no water running." }
+    ],
+    healthcare: [
+      { title: "Staff Shortage at Health Center", desc: "No doctors are available at the primary health center during official hours." },
+      { title: "Medicine Stock Exhausted at PHC", desc: "Basic medicines like paracetamol are out of stock at the municipal pharmacy." },
+      { title: "Long Waiting Times at Clinic", desc: "Patients have to wait for over 3 hours just for a routine checkup." },
+      { title: "Cleanliness Issues in Ward", desc: "The floors of the clinic are not swept and bio-waste bins are open." }
+    ],
+    education: [
+      { title: "Broken Benches in Classroom", desc: "Benches and desks in the local school classroom are broken and unusable." },
+      { title: "Drinking Water Facility Broken", desc: "The water cooler in the government school is broken and students have no drinking water." },
+      { title: "Leaking Roof in School Building", desc: "During rains, the roof of the classroom leaks water, disrupting classes." },
+      { title: "No Play Area Equipment", desc: "The children's play area has broken swings and is full of weeds." }
+    ],
+    transport: [
+      { title: "No Bus Shelter at Bus Stop", desc: "There is no shelter or seating at the bus stop, forcing commuters to stand in the sun/rain." },
+      { title: "Bus Route Frequency Reduced", desc: "The frequency of local buses connecting to the center has been reduced." },
+      { title: "Encroached Footpath at Transit", desc: "Footpaths near the transit hub are heavily encroached by illegal vendors." },
+      { title: "Street Signs Missing at Junction", desc: "Important street name and direction signs are missing at the main transit junction." }
+    ],
+    other: [
+      { title: "Park Benches Broken", desc: "The benches in the local public park are broken and need replacement." },
+      { title: "Stray Dog Menace", desc: "Stray dogs are attacking children and pedestrians in the evening." },
+      { title: "Noise Pollution from Commercial Zone", desc: "Commercial shops are running loud machinery late at night in residential areas." }
+    ]
+  };
+
+  const categories = Object.keys(targetCounts) as ComplaintCategory[];
+  let countCreated = 0;
+  
+  categories.forEach((cat) => {
+    const totalToGen = targetCounts[cat];
+    const distribution = categoryWards[cat];
+    const templates = titlesAndDescs[cat];
+    
+    for (let i = 0; i < totalToGen; i++) {
+      countCreated++;
+      let ward = "";
+      if (i < distribution.primaryCount) {
+        ward = distribution.primary;
+      } else {
+        const secIndex = (i - distribution.primaryCount) % distribution.secondary.length;
+        ward = distribution.secondary[secIndex];
+      }
+      
+      const templateIndex = (i + countCreated) % templates.length;
+      const template = templates[templateIndex];
+      const id = `cmp_gen_${cat}_${i}_${Math.random().toString(36).slice(2, 6)}`;
+      const shortId = `JV-${1000 + countCreated}`;
+      
+      let joinedCount = (countCreated * 31 + i * 17) % 35;
+      if (cat === "roads") joinedCount = 45 + (i % 25);
+      else if (cat === "water") joinedCount = 30 + (i % 20);
+      
+      const minutesAgo = countCreated * 45;
+      const reportedDate = new Date(Date.now() - minutesAgo * 60 * 1000);
+      const reportedAt = reportedDate.toISOString();
+      const updatedAt = new Date(reportedDate.getTime() + 60 * 60 * 1000).toISOString();
+      
+      let severity: SeverityLevel = "medium";
+      if (i % 8 === 0) severity = "critical";
+      else if (i % 4 === 0) severity = "high";
+      else if (i % 3 === 0) severity = "low";
+      
+      const hasPhoto = i % 10 === 0; 
+      const photos = hasPhoto ? [{
+        id: `ph_${id}`,
+        url: `https://images.unsplash.com/photo-${1500000000000 + i}?auto=format&fit=crop&w=400&h=300&q=80`,
+        thumbnailUrl: `https://images.unsplash.com/photo-${1500000000000 + i}?auto=format&fit=crop&w=100&h=100&q=80`,
+        uploadedAt: reportedAt,
+        uploadedBy: `ctz_gen_${i}`
+      }] : [];
+
+      const tempComplaint: Complaint = {
+        id,
+        shortId,
+        title: `${template.title} in ${ward}`,
+        description: template.desc,
+        category: cat,
+        status: i % 5 === 0 ? "in_progress" : "submitted",
+        severity,
+        location: {
+          lat: 9.9252 + (countCreated % 50) * 0.0005 * (countCreated % 2 === 0 ? 1 : -1),
+          lng: 78.1198 + (countCreated % 50) * 0.0005 * (countCreated % 2 === 0 ? -1 : 1),
+          ward,
+          address: `${ward} Residential Colony`,
+          district: "Madurai"
+        },
+        photos,
+        citizensJoined: joinedCount,
+        joinedCitizenIds: [],
+        reportedBy: `ctz_gen_${i}`,
+        reportedAt,
+        updatedAt,
+        statusHistory: [
+          { id: `su_gen_${id}_1`, status: "submitted", message: "Complaint logged via mobile app.", updatedBy: "system", updatedAt: reportedAt, isPublic: true },
+        ],
+        ward,
+        district: "Madurai",
+        isAnonymous: i % 6 === 0,
+      };
+
+      const suggestedDeptMap: Record<ComplaintCategory, Department> = {
+        water: "water_board",
+        sanitation: "sanitation",
+        roads: "public_works",
+        electricity: "electricity_board",
+        drainage: "storm_water",
+        healthcare: "health",
+        education: "education",
+        transport: "transport",
+        other: "general"
+      };
+
+      tempComplaint.aiAnalysis = {
+        detectedCategory: cat,
+        suggestedDepartment: suggestedDeptMap[cat] ?? "general",
+        severity,
+        confidenceScore: hasPhoto ? 0.92 : 0.65,
+        citizenSummary: `AI generated ticket summary for ${template.title} in ${ward}.`,
+        mpSummary: `AI Summary: ${template.title} reported in ${ward}. ${joinedCount + 1} citizens affected. Service disruption verified.`,
+        governmentNote: "Field inspection suggested.",
+        suggestedAction: "Forward to department.",
+        keyFacts: [`${joinedCount + 1} citizens joined`, `Location: ${ward}`, `Category: ${cat}`],
+        aiReasoning: hasPhoto ? "Image analysis and keywords confirmed the grievance." : "Keyword match only. No visual evidence.",
+        processingTimeMs: 800
+      };
+
+      seedList.push(tempComplaint);
+    }
+  });
+
+  saveComplaintsLocal(seedList);
+  return seedList;
 }
 
 function setupFirestoreListener() {
@@ -269,7 +466,6 @@ function setupFirestoreListener() {
               .catch((err) => console.error("Error seeding Firestore doc:", err));
           });
         } else {
-          // Sort remote complaints by reportedAt descending
           remoteComplaints.sort((a, b) => new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime());
           complaintsCache = remoteComplaints;
           saveComplaintsLocal(remoteComplaints);
@@ -308,11 +504,82 @@ function generateId(): string {
   return `cmp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
+export function calculateDynamicImpactScore(c: Complaint): {
+  total: number;
+  breakdown: {
+    severityScore: number;
+    supportScore: number;
+    duplicateScore: number;
+    trendScore: number;
+    ageScore: number;
+    details: string[];
+  };
+} {
+  let severityScore = 20;
+  if (c.severity === "critical") severityScore = 100;
+  else if (c.severity === "high") severityScore = 75;
+  else if (c.severity === "medium") severityScore = 45;
+  else if (c.severity === "low") severityScore = 20;
+
+  const supportScore = Math.min((c.citizensJoined + 1) * 4, 100);
+
+  const complaints = complaintsCache && complaintsCache.length > 0 ? complaintsCache : SEED_COMPLAINTS;
+  const duplicateCount = complaints.filter(
+    (x) => x.category === c.category && x.ward === c.ward && x.id !== c.id
+  ).length;
+  const duplicateScore = Math.min(duplicateCount * 25, 100);
+
+  const trendScore = c.citizensJoined > 12 ? 100 : c.citizensJoined > 6 ? 60 : 30;
+
+  const ageMs = Date.now() - new Date(c.reportedAt).getTime();
+  const ageHours = ageMs / (1000 * 60 * 60);
+  let ageScore = 10;
+  if (ageHours < 6) ageScore = 100;
+  else if (ageHours < 24) ageScore = 80;
+  else if (ageHours < 72) ageScore = 50;
+  else if (ageHours < 168) ageScore = 30;
+
+  let total = Math.round(
+    severityScore * 0.3 +
+    supportScore * 0.25 +
+    duplicateScore * 0.2 +
+    trendScore * 0.15 +
+    ageScore * 0.1
+  );
+
+  const hasImage = c.photos && c.photos.length > 0;
+  if (!hasImage) {
+    const justified = c.citizensJoined >= 15 || duplicateCount >= 2;
+    if (!justified) {
+      total = Math.min(total, 55);
+    }
+  }
+
+  return {
+    total,
+    breakdown: {
+      severityScore,
+      supportScore,
+      duplicateScore,
+      trendScore,
+      ageScore,
+      details: [
+        `${c.severity.toUpperCase()} Severity (${severityScore}/100)`,
+        `${c.citizensJoined + 1} Supporting Citizens (${supportScore}/100)`,
+        `${duplicateCount} Similar Reports (${duplicateScore}/100)`,
+        c.citizensJoined > 12 ? `Rapidly Increasing Trend (${trendScore}/100)` : `Stable Trend (${trendScore}/100)`,
+        ageHours < 24 ? `Submitted within 24h (${ageScore}/100)` : `Submitted ${Math.round(ageHours / 24)}d ago (${ageScore}/100)`
+      ]
+    }
+  };
+}
+
 function generateShortId(): string {
   return `JV-${Math.floor(Math.random() * 9000 + 1000)}`;
 }
 
 function toSummary(c: Complaint): ComplaintSummary {
+  const dynamicScore = calculateDynamicImpactScore(c).total;
   return {
     id: c.id,
     shortId: c.shortId,
@@ -322,7 +589,7 @@ function toSummary(c: Complaint): ComplaintSummary {
     severity: c.severity,
     ward: c.ward,
     citizensJoined: c.citizensJoined,
-    impactScore: c.impactScore?.total ?? 0,
+    impactScore: dynamicScore,
     reportedAt: c.reportedAt,
     location: c.location,
     mpSummary: c.aiAnalysis?.mpSummary,
